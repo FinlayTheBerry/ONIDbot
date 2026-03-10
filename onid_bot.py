@@ -3,7 +3,6 @@
 import discord
 import json
 import os
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -16,8 +15,8 @@ import time
 import hmac
 import hashlib
 
-# Bot authentication url
-# https://discord.com/oauth2/authorize?client_id=1344219132027076629
+# Bot authentication url:
+# https://discord.com/oauth2/authorize?client_id={CLIENTID}
 
 # region File IO
 def IO_WriteFile(filePath, contents, binary=False):
@@ -38,7 +37,7 @@ def IO_SerializeJson(obj, compact=False):
 def IO_DeserializeJson(jsonString):
     return json.loads(jsonString)
 def IO_EncodeBase64(payloadBytes):
-    return base64.urlsafe_b64encode(payloadBytes).decode(encoding="utf-8").replace("=", "")
+    return base64.urlsafe_b64encode(payloadBytes).rstrip(b"=").decode(encoding="utf-8")
 def IO_DecodeBase64(base64String):
     base64String += "=" * ((-len(base64String)) % 4)
     return base64.urlsafe_b64decode(base64String.encode(encoding="utf-8"))
@@ -212,24 +211,27 @@ def MS_EmailFromToken(access_token):
     token_object = json.loads(token_json)
     return token_object["upn"]
 def MS_SendEmail(to, subject, body):
-    access_token = MS_GetAccessToken()
-    email = MS_EmailFromToken(access_token)
-    with smtplib.SMTP("smtp.office365.com", 587) as smtp:
-        smtp.starttls()
-        smtp.ehlo() # Required before auth. Handshake to agree on supported features.
-        auth_code = base64.b64encode(("user=" + email + "\x01auth=Bearer " + access_token + "\x01\x01").encode("utf-8")).decode("utf-8")
-        code, resp = smtp.docmd("AUTH", "XOAUTH2 " + auth_code)
-        if code != 235:
-            raise Exception("SMTP auth failure " + str(code) + " " + resp.decode(encoding="utf-8"))
+    try:
+        access_token = MS_GetAccessToken()
+        email = MS_EmailFromToken(access_token)
+        with smtplib.SMTP("smtp.office365.com", 587) as smtp:
+            smtp.starttls()
+            smtp.ehlo() # Required before auth. Handshake to agree on supported features.
+            auth_code = base64.b64encode(("user=" + email + "\x01auth=Bearer " + access_token + "\x01\x01").encode("utf-8")).decode("utf-8")
+            code, resp = smtp.docmd("AUTH", "XOAUTH2 " + auth_code)
+            if code != 235:
+                raise Exception("SMTP auth failure " + str(code) + " " + resp.decode(encoding="utf-8"))
 
-        msg = MIMEMultipart()
-        msg["From"] = email
-        msg["To"] = to
-        msg["Subject"] = subject
-        msg.attach(MIMEText(body, "html"))
+            msg = MIMEMultipart()
+            msg["From"] = email
+            msg["To"] = to
+            msg["Subject"] = subject
+            msg.attach(MIMEText(body, "html"))
 
-        smtp.send_message(msg)
-        Log_Info(f"Sent email to {to} with subject {subject}")
+            smtp.send_message(msg)
+            Log_Info(f"Sent email to {to} with subject {subject}")
+    except BaseException as ex:
+        print(ex)
 async def MS_SendEmailAsync(to, subject, body):
     return await asyncio.to_thread(MS_SendEmail, to, subject, body)
 if not "msauth_refresh_token" in ENV:
@@ -238,7 +240,7 @@ if not "msauth_refresh_token" in ENV:
 
 # region Verification Codes
 def Code_Generate(discord_id, onid_email):
-    payload_obj = { "version": 2, "timestamp": IO_GetEpoch(), "discord_id": discord_id, "onid_email": onid_email }
+    payload_obj = { "version": 3, "epoch_timestamp": IO_GetEpoch(), "discord_guild_id": ENV["discord_guild_id"], "discord_user_id": discord_id, "onid_email": onid_email }
     payload_bytes = IO_SerializeJson(payload_obj, compact=True).encode(encoding="utf-8")
     signing_key_bytes = bytes.fromhex(ENV["signing_key"])
     signature_bytes = hmac.new(signing_key_bytes, payload_bytes, hashlib.sha256).digest()
@@ -248,9 +250,9 @@ def Code_Generate(discord_id, onid_email):
     return code
 def Code_ParseAndVerify(code):
     code = IO_DecodeBase64(code).decode(encoding="utf-8")
-    index = code.index(".")
-    if index == -1 or index == 0 or index == len(code) - 1:
-        raise Exception("Bad or missing separator")
+    index = code.index(".") # Throws if "." not found.
+    if index == 0 or index == len(code) - 1:
+        raise Exception("Bad separator position")
     payload_bytes = IO_DecodeBase64(code[:index])
     signature_bytes = IO_DecodeBase64(code[index + 1:])
     signing_key_bytes = bytes.fromhex(ENV["signing_key"])
@@ -293,7 +295,9 @@ def WatchDogInGoodStanding(discord_id):
     return WatchDogQuery(discord_id) < 10
 
 # Initialize client and command tree classes.
-discord_client = discord.Client(intents=discord.Intents.default())
+discord_intents = discord.Intents.default()
+discord_intents.members = True
+discord_client = discord.Client(intents=discord_intents)
 discord_command_tree = discord.app_commands.CommandTree(discord_client)
 discord_server = discord.Object(ENV["discord_server_id"])
 discord_verified_role = discord.Object(ENV["discord_verified_role_id"])

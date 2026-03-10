@@ -1,14 +1,14 @@
 # What is ONIDbot?
 ONIDbot is a free and open source Discord bot which can be added to any server for free.  
 It was developed by Finlay Christ a cybersecurity major at Oregon State University.  
-ONIDbot is designed to collect and verify the OregonState.edu email addresses of your server's members.  
-You have full control over which permissions are granted to everyone and which require ONID verification.
+ONIDbot is designed to collect and verify the @OregonState.edu email addresses of your server's members.  
+You have full control over which permissions are granted to everyone and which require ONID verification.  
 
 # Why do I even need ONIDbot?
 As soon as a Discord server invite link gets posted on social media that server becomes a public space.  
 People from around the world can join regardless of student status or intentions.  
 Even the links you post on IdealLogic are public!  
-While banning a single account is easy creating alt accounts to bypass a ban is equally as easy.  
+While banning a single account is easy, creating alt accounts to bypass a ban is equally as easy.  
 With ONIDbot you can hold users accountable for their actions by requiring their ONID email which is linked to their full name.  
 
 # Addinging The Bot/Permissions:
@@ -38,9 +38,6 @@ Finally run "/post_verify_button" to post the "Get Verified" button into the get
 Setup should be complete but I recommend double checking by going through the verification process on an alt account.
 
 # TODO:
-Write docs on how to setup optional unverified role  
 Code ONIDbot to record better logs  
-Code ONIDbot to give new members unverified  
-Code ONIDbot to support different verified_role and unverified_role for each server  
-Code ONIDbot to store verification status per user per server not globally  
-Make HTML layout and styles prettier for Verify.html and Email.html
+Code ONIDbot to support different verified_role for each server  
+Code ONIDbot to support /manual_verify for bootstrap verification  

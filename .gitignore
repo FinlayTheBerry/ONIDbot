@@ -1,6 +1,4 @@
-environment.json
-database.json
-log.txt
-.git/
+database/
 venv/
-backups/
+environment.json
+log.txt
