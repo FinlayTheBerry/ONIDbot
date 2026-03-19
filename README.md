@@ -39,5 +39,5 @@ Setup should be complete but I recommend double checking by going through the ve
 
 # TODO:
 Code ONIDbot to record better logs  
-Code ONIDbot to support different verified_role for each server  
-Code ONIDbot to support /manual_verify for bootstrap verification  
+Code ONIDbot to search for ONID-Verified role on each server  
+Code ONIDbot so get_user_info requires you yourself to be verified  

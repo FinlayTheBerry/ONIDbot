@@ -1,4 +1,6 @@
-database/
+backups/
+database.json
 venv/
 environment.json
 log.txt
+msauth_token
