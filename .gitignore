@@ -4,3 +4,4 @@ venv/
 environment.json
 log.txt
 msauth_token
+__pycache__/

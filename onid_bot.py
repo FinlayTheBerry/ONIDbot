@@ -44,15 +44,6 @@ async def IO_GetTime():
     return timestamp.strftime("%I:%M%p %m/%d").lower()
 # endregion
 
-# region Environment
-ENV = None
-async def Env_Load():
-    global ENV
-    env_path = os.path.join(await IO_GetScriptDir(), "environment.json")
-    ENV = await IO_DeserializeJson(await IO_ReadFile(env_path))
-asyncio.run(Env_Load())
-# endregion
-
 # region Logs
 async def Log_Generic(message, log_type, ansi_color):
     padding = " " * (8 - len(log_type)) if len(log_type) < 8 else ""
@@ -81,6 +72,15 @@ async def Log_Exception(ex):
             return
         tb = tb.tb_next
     await Log_Generic(f"{str(ex)} at unknown location", "ERROR", "31")
+# endregion
+
+# region Environment
+ENV = None
+async def Env_Load():
+    global ENV
+    env_path = os.path.join(await IO_GetScriptDir(), "environment.json")
+    ENV = await IO_DeserializeJson(await IO_ReadFile(env_path))
+asyncio.run(Env_Load())
 # endregion
 
 # Working with the main user database.
@@ -233,11 +233,7 @@ async def MS_SendEmail(to, subject, body):
     }
     response = requests.post(f"https://graph.microsoft.com/v1.0/users/{from_address}/sendMail", json=request, headers=headers)
     response.raise_for_status()
-async def hi():
-    email = (await IO_ReadFile("./email/email.html")).replace("##CODE##", str(123456))
-    await MS_SendEmail("christj@oregonstate.edu", f"{123456} - ONIDBot Verification Code", email)
-asyncio.run(hi())
-# InitTasks.append(MS_LoadRefreshToken)
+InitTasks.append(MS_LoadRefreshToken)
 # endregion
 
 codes = {}
@@ -288,7 +284,7 @@ class OnidInputModal(discord.ui.Modal):
             await discord_client.application.owner.send(f"{discord_client.application.owner.mention} YO MAMA SO FAT")
 
             email = IO_ReadFile("./email/email.html").replace("##CODE##", str(code))
-            await MS_SendEmailAsync(onid_email, f"{code} - ONIDBot Verification Code", email)
+            await MS_SendEmailAsync(onid_email, f"{code} - ONIDbot Verification Code", email)
             await interaction.followup.send(f"A verification code has been sent to {onid_email}.\n\nPlease allow up to 15 minutes for the code to arive, and **check spam.**", ephemeral=True, wait=True)
         except BaseException as ex:
             Log_Exception(ex)
@@ -376,7 +372,7 @@ async def DC_InitClient():
     async def get_user_info(interaction: discord.Interaction, user: discord.Member):
         try:
             if not interaction.user.is_verified:
-                await interaction.response.send_message("You must be verified by ONIDBot to run this command.", ephemeral=True)
+                await interaction.response.send_message("You must be verified by ONIDbot to run this command.", ephemeral=True)
                 return
             user_id = str(user.id)
             user_mention = user.mention

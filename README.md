@@ -41,3 +41,5 @@ Setup should be complete but I recommend double checking by going through the ve
 Code ONIDbot to record better logs  
 Code ONIDbot to search for ONID-Verified role on each server  
 Code ONIDbot so get_user_info requires you yourself to be verified  
+Code ONIDbot to use COE SMTP server  
+Code ONIDbot so it checks the perms of environment.json and forces it to be secret  
