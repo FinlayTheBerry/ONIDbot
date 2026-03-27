@@ -257,6 +257,8 @@ class OnidInputModal(discord.ui.Modal):
     onid_input = discord.ui.TextInput(label="Enter your ONID email address:", placeholder="onid@oregonstate.edu", required=True, custom_id="onid_text_input")
     async def on_submit(self, interaction: discord.Interaction):
         try:
+            if interaction.user.id in DB:
+                return # Hard bail and fail interaction
             await interaction.response.defer(ephemeral=True)
             onid_email = str(self.onid_input.value).strip().lower()
             if not onid_email.endswith("@oregonstate.edu") or len(onid_email) <= len("@oregonstate.edu"):
@@ -281,6 +283,8 @@ class CodeInputModal(discord.ui.Modal):
     code_input = discord.ui.TextInput(label="Enter your verification code:", placeholder="ABC123", required=True, custom_id="code_text_input")
     async def on_submit(self, interaction: discord.Interaction):
         try:
+            if interaction.user.id in DB:
+                return # Hard bail and fail interaction
             await interaction.response.defer(ephemeral=True)
             code = str(self.code_input.value).strip().upper()
             if not len(code) == 6 or not all([ c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" for c in code ]):
