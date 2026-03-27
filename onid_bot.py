@@ -1,9 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/python3
 
-# import discord
 import json
 import os
-import math
 import requests
 from datetime import datetime, timezone
 import time
@@ -12,7 +10,9 @@ import sys
 import secrets
 import smtplib
 from email.message import EmailMessage
-import email.utils
+import asyncio
+import time
+import socket
 
 # Bot authentication url:
 # https://discord.com/oauth2/authorize?client_id={CLIENTID}
@@ -37,7 +37,7 @@ def IO_SerializeJson(obj, compact=False):
 def IO_DeserializeJson(jsonString):
     return json.loads(jsonString)
 def IO_GetEpoch():
-    return int(time.time()) + time.localtime().tm_gmtoff
+    return time.time() + time.localtime().tm_gmtoff
 def IO_GetTime():
     epoch = IO_GetEpoch()
     timestamp = datetime.fromtimestamp(epoch, tz=timezone.utc)
@@ -47,7 +47,7 @@ def IO_GetTime():
 # region Logs
 def Log_Generic(message, log_type, ansi_color):
     padding = " " * (8 - len(log_type)) if len(log_type) < 8 else ""
-    formatted_message = f"{log_type}{padding}({IO_GetTime()} {IO_GetEpoch()}): {message}"
+    formatted_message = f"{log_type}{padding}({IO_GetTime()} {int(IO_GetEpoch())}): {message}"
     print(f"\033[{ansi_color}m{formatted_message}\033[0m", flush=True)
     log_path = os.path.join(IO_GetScriptDir(), "log.txt")
     log_contents = ""
@@ -74,6 +74,20 @@ def Log_Exception(ex):
     Log_Generic(f"{str(ex)} at unknown location", "ERROR", "31")
 # endregion
 
+# region Randomness
+def GetRandomCode():
+    charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    output = []
+    for _ in range(6):
+        while True:
+            i = int.from_bytes(secrets.token_bytes(1), byteorder="little") & 0x3F
+            if i > 35:
+                continue
+            output.append(charset[i])
+            break
+    return "".join(output)
+# endregion
+
 # region Environment
 ENV = None
 def Env_Load():
@@ -98,7 +112,7 @@ def DB_Load():
         DB_Save()
 def DB_Backup():
     db_path = os.path.join(IO_GetScriptDir(), "database.json")
-    backup_file_name = f"backups/{IO_GetEpoch()}.json"
+    backup_file_name = f"backups/{int(IO_GetEpoch())}.json"
     backup_path = os.path.join(IO_GetScriptDir(), backup_file_name)
     IO_WriteFile(backup_path, IO_ReadFile(db_path))
     Log_Info(f"Backed up database.json to {backup_file_name}.")
@@ -106,24 +120,15 @@ def DB_Save():
     db_path = os.path.join(IO_GetScriptDir(), "database.json")
     IO_WriteFile(db_path, IO_SerializeJson(DB))
     backups_dir_path = os.path.join(IO_GetScriptDir(), "backups")
-    if not os.path.isdir(backups_dir_path):
-        os.mkdir(backups_dir_path)
-        Log_Warning(f"{backups_dir_path} did not exist so it was created.")
     latest_backup_time = 0
     for backup_path in os.listdir(backups_dir_path):
         if not os.path.isfile(os.path.join(backups_dir_path, backup_path)):
-            Log_Warning(f"{backup_path} is not a file.")
-            continue
-        try:
-            backup_time = int(os.path.splitext(backup_path)[0])
-        except:
-            Log_Warning(f"{backup_path} is not a valid file name.")
-            continue
+            raise Exception(f"{backup_path} is not a file.")
+        backup_time = int(os.path.splitext(backup_path)[0])
         if backup_time > latest_backup_time:
             latest_backup_time = backup_time
-    if IO_GetEpoch() - latest_backup_time > 24 * 60 * 60:
+    if int(IO_GetEpoch()) - latest_backup_time > 24 * 60 * 60:
         DB_Backup()
-DB_Load()
 
 # region OSU API
 def OSU_LookupOnidName(onid_email):
@@ -158,10 +163,10 @@ def OSU_LookupOnidName(onid_email):
 def SMTP_SendEmail(to, subject, body, body_html):
     SMTP_SERVER = "mail.engr.oregonstate.edu"
     SMTP_PORT = 465
-    
+
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = email.utils.formataddr(("ONIDbot", f"{ENV["email_username"]}@oregonstate.edu"))
+    msg["From"] = f"{ENV['email_username']}@oregonstate.edu"
     msg["To"] = to
     msg.set_content(body)
     msg.add_alternative(body_html, subtype="html")
@@ -169,44 +174,80 @@ def SMTP_SendEmail(to, subject, body, body_html):
     with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as smtp_server:
         smtp_server.login(ENV["email_username"], ENV["email_password"])
         smtp_server.send_message(msg)
+    
+    Log_Info(f"Sent email to \"{to}\" with subject \"{subject}\".")
 def SMTP_SendCode(to, code):
     body = IO_ReadFile(os.path.join(IO_GetScriptDir(), "email", "email.txt")).replace("##CODE##", code)
     body_html = IO_ReadFile(os.path.join(IO_GetScriptDir(), "email", "email.html")).replace("##CODE##", code)
-    SMTP_SendEmail(to, f"{code} - ONIDBot Verification Code", body, body_html)
+    SMTP_SendEmail(to, f"{code} - ONIDbot Verification Code", body, body_html)
 # endregion
 
-# region Codes
 REQUESTS = {}
-def GetRandomCode():
-    charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    output = []
-    for _ in range(6):
-        while True:
-            i = int.from_bytes(secrets.token_bytes(1)) & 0x3F
-            if i > 35:
-                continue
-            output.append(charset[i])
-            break
-    return "".join(output)
-# endregion
 
 # region Discord
 discord_client = discord.Client(intents=discord.Intents.default())
 discord_command_tree = discord.app_commands.CommandTree(discord_client)
+async def guild_verify(interaction: discord.Interaction, already_verified):
+    onid_email = DB[interaction.user.id]["onid_email"]
+    onid_name = DB[interaction.user.id]["onid_name"]
+
+    verified_role = None
+    for guild_role in interaction.guild.roles:
+        if guild_role.name == "ONID-Verified":
+            verified_role = guild_role
+            break
+
+    if verified_role == None:
+        Log_Info(f"Verified @{interaction.user.name} <@{interaction.user.id}> as \"{onid_name}\" {onid_email} on \"{interaction.guild.name}\" {interaction.guild.id} but failed to assign ONID-Verified role because it does not exist.")
+        if already_verified:
+            await interaction.followup.send(f"You are already verified however this server doesn't have an \"ONID-Verified\" role to give you. Please reach out to the server administrators to create this role.", ephemeral=True, wait=True)
+        else:
+            await interaction.followup.send(f"You have been successfully verified however this server doesn't have an \"ONID-Verified\" role to give you. Please reach out to the server administrators to create this role.", ephemeral=True, wait=True)
+        return
+
+    try:
+        await interaction.user.add_roles(verified_role)
+    except discord.errors.Forbidden as ex:
+        Log_Info(f"Failed to assign ONID-Verified role to @{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} due to insufficient permissions.")
+        if already_verified:
+            await interaction.followup.send(f"You are already verified however {discord_client.user.mention} doesn't have permission to assign you the ONID-Verified role. Please reach out to the server administrators to grant {discord_client.user.mention} this permission.", ephemeral=True, wait=True)
+        else:
+            await interaction.followup.send(f"You have been successfully verified however {discord_client.user.mention} doesn't have permission to assign you the ONID-Verified role. Please reach out to the server administrators to grant {discord_client.user.mention} this permission.", ephemeral=True, wait=True)
+        return
+
+    try:
+        await interaction.user.edit(nick=onid_name)
+    except discord.errors.Forbidden as ex:
+        Log_Info(f"Failed to nick @{interaction.user.name} <@{interaction.user.id}> to \"{onid_name}\" on \"{interaction.guild.name}\" {interaction.guild.id} due to insufficient permissions.")
+
+    if already_verified:
+        await interaction.followup.send(f"You are already verified as \"{onid_name}\" {onid_email}. The ONID-Verified role has been assigned to you on this server.", ephemeral=True, wait=True)
+    else:
+        await interaction.followup.send(f"You have successfully verified as \"{onid_name}\" {onid_email}.", ephemeral=True, wait=True)
+
+    Log_Info(f"Verified @{interaction.user.name} <@{interaction.user.id}> as \"{onid_name}\" {onid_email} on \"{interaction.guild.name}\" {interaction.guild.id}.")
 class ButtonsView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-    @discord.ui.button(label="Get Verification Code!", style=discord.ButtonStyle.primary, emoji="\U00000031\U0000fe0f\U000020e3", custom_id="get_code_button")
+    @discord.ui.button(label="Enter ONID Email!", style=discord.ButtonStyle.primary, emoji="\U00000031\U0000fe0f\U000020e3", custom_id="get_code_button")
     async def get_code_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
-            await interaction.response.send_modal(OnidInputModal())
+            if interaction.user.id in DB:
+                await interaction.response.defer(ephemeral=True)
+                await guild_verify(interaction, already_verified=True)
+            else:
+                await interaction.response.send_modal(OnidInputModal())
         except BaseException as ex:
             Log_Exception(ex)
             raise ex
     @discord.ui.button(label="Enter Verification Code!", style=discord.ButtonStyle.primary, emoji="\U00000032\U0000fe0f\U000020e3", custom_id="enter_code_button")
     async def enter_code_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
-            await interaction.response.send_modal(CodeInputModal())
+            if interaction.user.id in DB:
+                await interaction.response.defer(ephemeral=True)
+                await guild_verify(interaction, already_verified=True)
+            else:
+                await interaction.response.send_modal(CodeInputModal())
         except BaseException as ex:
             Log_Exception(ex)
             raise ex
@@ -230,7 +271,7 @@ class OnidInputModal(discord.ui.Modal):
             REQUESTS[interaction.user.id] = request
             Log_Info(f"Created code {code} for @{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} for \"{onid_name}\" {onid_email}")
             SMTP_SendCode(onid_email, code)
-            await interaction.followup.send(f"{interaction.user.mention} A verification code has been sent to **{onid_email}**.\n\nCodes can take up to 5 minutes to arive. Check your **SPAM** folder before requesting another code.", ephemeral=True, wait=True)
+            await interaction.followup.send(f"A verification code has been sent to **{onid_email}**.\n\nCodes can take up to 5 minutes to arive. Check your **SPAM** folder before requesting a new code.", ephemeral=True, wait=True)
         except BaseException as ex:
             Log_Exception(ex)
             raise ex
@@ -243,35 +284,18 @@ class CodeInputModal(discord.ui.Modal):
             await interaction.response.defer(ephemeral=True)
             code = str(self.code_input.value).strip().upper()
             if not len(code) == 6 or not all([ c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" for c in code ]):
-                await interaction.followup.send(f"The code you entered doesn't look quite right. Please try again.", ephemeral=True, wait=True)
+                await interaction.followup.send(f"The code you entered doesn't look quite right. It may have expired. Please try again.", ephemeral=True, wait=True)
                 return
             request = None
             if interaction.user.id in REQUESTS:
                 request = REQUESTS[interaction.user.id]
-            if request == None or request["code"] != code or IO_GetEpoch() - request["time"] > 900:
-                await interaction.followup.send(f"The code you entered doesn't look quite right. Please try again.", ephemeral=True, wait=True)
+            if request == None or request["code"] != code or IO_GetEpoch() - request["time"] > 900.0:
+                await interaction.followup.send(f"The code you entered doesn't look quite right. It may have expired. Please try again.", ephemeral=True, wait=True)
                 return
-            Log_Info(f"Verified code {code} for @{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} for \"{request["onid_name"]}\" {request["onid_email"]}")
-            DB[interaction.user.id] = request["onid_email"]
+            DB[interaction.user.id] = { "onid_email": request["onid_email"], "onid_name": request["onid_name"], "notes": "" }
             DB_Save()
-            verified_role = None
-            for guild_role in interaction.guild.roles:
-                if guild_role.name == "ONID-Verified":
-                    verified_role = guild_role
-                    break
-            if not verified_role:
-                await interaction.followup.send(f"This server doesn't have an \"ONID-Verified\" role to assign to you. A role with exactly this name must be present to complete verification. Please reach out to the server administrators to create this role.", ephemeral=True, wait=True)
-                return
-            await interaction.user.add_roles(verified_role)
-            try:
-                await interaction.user.edit(nick=request["onid_name"])
-            except discord.errors.Forbidden as ex:
-                if ex.text == "Missing Permissions":
-                    Log_Warning(f"Failed to nick @{interaction.user.name} <@{interaction.user.id}> to \"{request["onid_name"]}\" on \"{interaction.guild.name}\" {interaction.guild.id} due to insufficient permissions.")
-                else:
-                    raise ex
             del REQUESTS[interaction.user.id]
-            await interaction.followup.send(f"{interaction.user.mention} You have successfully verified as {request["onid_email"]}.", ephemeral=True, wait=True)
+            await guild_verify(interaction, already_verified=False)
         except BaseException as ex:
             Log_Exception(ex)
             raise ex
@@ -285,27 +309,32 @@ async def on_ready():
     except BaseException as ex:
         Log_Exception(ex)
         raise ex
-@discord_command_tree.command(name="post_verification_buttons", description="Posts the get verified button to the current channel.")
+@discord_command_tree.command(name="post_verification_buttons", description="Posts the verification buttons to the current channel.")
 async def post_verification_buttons(interaction: discord.Interaction):
     try:
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.guild_permissions.administrator:
             await interaction.followup.send("You need the administrator permission in this server to run this command.", wait=True)
             return
-        await interaction.channel.send("", view=ButtonsView())
+        try:
+            await interaction.channel.send("", view=ButtonsView())
+        except discord.errors.Forbidden as ex:
+                Log_Info(f"Failed to post verification buttons on \"{interaction.guild.name}\" {interaction.guild.id} due to insufficient permissions.")
+                await interaction.followup.send(f"{discord_client.user.mention} does not have permission to post messages in this channel and therefore could not post the verification buttons.", ephemeral=True, wait=True)
+                return
         await interaction.followup.send("Done!", wait=True)
     except BaseException as ex:
         Log_Exception(ex)
         raise ex
-@discord_command_tree.command(name="get_verification_info", description="Posts a bunch of debug information on a target user just for you.")
-async def get_user_info(interaction: discord.Interaction, user: discord.Member):
+@discord_command_tree.command(name="get_verification_info", description="Prints weather a given Discord account is ONID verified.")
+async def get_verification_info(interaction: discord.Interaction, user: discord.Member):
     try:
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.id in DB:
             await interaction.followup.send("You must be verified by ONIDbot to run this command.", ephemeral=True, wait=True)
             return
         if user.id in DB:
-            await interaction.followup.send(f"{user.mention} is verified as {DB[user.id]}.", ephemeral=True, wait=True)
+            await interaction.followup.send(f"{user.mention} is verified as \"{DB[user.id]['onid_name']}\" {DB[user.id]['onid_email']}.", ephemeral=True, wait=True)
         else:
             await interaction.followup.send(f"{user.mention} is not verified.", ephemeral=True, wait=True)
     except BaseException as ex:
@@ -313,13 +342,71 @@ async def get_user_info(interaction: discord.Interaction, user: discord.Member):
         raise ex
 # endregion
 
+# region Launch Time Cluster
+START_TIME = IO_GetEpoch()
+IS_PRIMARY = False
+async def CLUSTER_GetLaunchTime(hostname):
+    try:
+        reader, writer = await asyncio.wait_for(asyncio.open_connection(hostname, ENV["cluster_port"]), timeout=3.0)
+        data = await reader.read(256)
+        writer.close()
+        await writer.wait_closed()
+        return float(data.decode().strip())
+    except Exception:
+        return float("inf")
+async def CLUSTER_HandleRequest(reader, writer):
+    try:
+        writer.write(str(START_TIME).encode())
+        await writer.drain()
+    finally:
+        writer.close()
+        await writer.wait_closed()
+async def CLUSTER_Run():
+    global IS_PRIMARY
+    
+    my_hostname = socket.gethostname()
+    
+    cluster_state = {}
+    for hostname in ENV["cluster_hostnames"]:
+        if hostname == my_hostname:
+            continue
+        cluster_state[hostname] = (await CLUSTER_GetLaunchTime(hostname)) != None
+    
+    async with await asyncio.start_server(CLUSTER_HandleRequest, "0.0.0.0", ENV["cluster_port"]):
+        print(f"Joined cluster on {my_hostname}:{ENV['cluster_port']}...")
+
+        while True:
+            min_peer_launch_time = float("inf")
+            for hostname in ENV["cluster_hostnames"]:
+                if hostname == my_hostname:
+                    continue
+
+                peer_launch_time = await CLUSTER_GetLaunchTime(hostname)
+                if peer_launch_time < min_peer_launch_time:
+                    min_peer_launch_time = peer_launch_time
+
+                if cluster_state[hostname] != (peer_launch_time != None) and IS_PRIMARY:
+                    Log_Warning(f"Hostname {hostname} is now {'down' if (peer_launch_time == None) else 'up'}.")
+                cluster_state[hostname] = peer_launch_time != None
+            
+            if START_TIME < min_peer_launch_time:
+                if not IS_PRIMARY:
+                    IS_PRIMARY = True
+                    Log_Info(f"{my_hostname} Taking over as primary...")
+                    DB_Load()
+                    asyncio.create_task(discord_client.start(ENV["discord_token"]))
+            
+            await asyncio.sleep(ENV["heartbeat_interval"])
+# endregion
+
 # region Main
 def Main():
     try:
-        discord_client.run(ENV["discord_token"])
-        return 0
+        asyncio.run(CLUSTER_Run())
+    except KeyboardInterrupt:
+        sys.exit(0)
     except BaseException as ex:
         Log_Exception(ex)
-        return 1
-sys.exit(Main())
+        sys.exit(1)
+Main()
 # endregion

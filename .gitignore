@@ -1,7 +1,7 @@
-backups/
-database.json
 venv/
 environment.json
+database.json
+backups/
 log.txt
 msauth_token
 __pycache__/
