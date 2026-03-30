@@ -313,6 +313,9 @@ async def on_ready():
     except BaseException as ex:
         Log_Exception(ex)
         raise ex
+@discord_client.event
+async def on_guild_join(guild: discord.Guild):
+    Log_Info(f"ONIDbot was added to a new guild \"{guild.name}\" {guild.id}.")
 @discord_command_tree.command(name="post_verification_buttons", description="Posts the verification buttons to the current channel.")
 async def post_verification_buttons(interaction: discord.Interaction):
     try:
