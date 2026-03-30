@@ -23,7 +23,7 @@ Send Messages is required to post the verification buttons on your server so mem
 Next you will need to create a role which is given to verified members.  
 Go to Server Settings > Roles and press Create Role.  
 Name the role exactly "ONID-Verified" and give that role the following permissions:  
-View Channels, Send Messages and Create Posts, Read Message History, Connect, Speak, Use Voice Activity.  
+View Channels, Send Messages and Create Posts, Read Message History, Connect, Speak, and Use Voice Activity.  
 Then go to @everyone and press "Clear permissions" to remove all permissions.  
 
 # Get Verified Channel Setup:
@@ -32,7 +32,7 @@ Go to Edit Channel > Permissions and set the following:
 @everyone is granted View Channel, and Read Message History  
 @ONIDbot is granted Send Messages  
 @ONID-Verified is denied Send Messages  
-Finally run "/post_verification_buttons" to post buttons in the get-verified channel.  
+Finally type "/post_verification_buttons" in the get-verified channel to post the buttons.  
 
 # Final Checks
 Setup should be complete but I recommend going through the verification process on an alt account.  

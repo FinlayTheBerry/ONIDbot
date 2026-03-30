@@ -232,7 +232,7 @@ class ButtonsView(discord.ui.View):
     @discord.ui.button(label="Enter ONID Email!", style=discord.ButtonStyle.primary, emoji="\U00000031\U0000fe0f\U000020e3", custom_id="get_code_button")
     async def get_code_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
-            if interaction.user.id in DB:
+            if interaction.user.id in DB and interaction.user.id != discord_client.application.owner.id:
                 await interaction.response.defer(ephemeral=True)
                 await guild_verify(interaction, already_verified=True)
             else:
@@ -243,7 +243,7 @@ class ButtonsView(discord.ui.View):
     @discord.ui.button(label="Enter Verification Code!", style=discord.ButtonStyle.primary, emoji="\U00000032\U0000fe0f\U000020e3", custom_id="enter_code_button")
     async def enter_code_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
-            if interaction.user.id in DB:
+            if interaction.user.id in DB and interaction.user.id != discord_client.application.owner.id:
                 await interaction.response.defer(ephemeral=True)
                 await guild_verify(interaction, already_verified=True)
             else:
