@@ -1,12 +1,14 @@
 #!/bin/sh
 
+cd "$(dirname "$0")"
+
 if [ ! -d "./venv" ]; then
-    python3 -m venv venv
+    python -m venv venv
     source venv/bin/activate
     pip install --upgrade pip
-    pip install discord requests cryptography
-    python3 ./onid_bot.py
+    pip install -r requirements.txt
+    python ./onid_bot.py
 else
     source venv/bin/activate
-    python3 ./onid_bot.py
+    python ./onid_bot.py
 fi

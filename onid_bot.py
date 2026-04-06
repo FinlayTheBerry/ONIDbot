@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/python
 
 import json
 import os
@@ -64,14 +64,14 @@ def Log_Exception(ex):
     tb = ex.__traceback__
     while tb is not None:
         if IO_RealPath(tb.tb_frame.f_code.co_filename) == IO_RealPath(__file__):
-            message = str(ex)
+            message = repr(ex)
             funcname = "<module>" if tb.tb_frame.f_code.co_name == "<module>" else tb.tb_frame.f_code.co_name + "()"
             lineno = tb.tb_lineno
             line = IO_ReadFile(tb.tb_frame.f_code.co_filename).splitlines()[lineno - 1].strip()
-            Log_Generic(f"{message} in {funcname} line {lineno}: {line}", "ERROR", "31")
+            Log_Generic(f"{message} in {funcname} line {lineno}: {line}", "PY_EX", "31")
             return
         tb = tb.tb_next
-    Log_Generic(f"{str(ex)} at unknown location", "ERROR", "31")
+    Log_Generic(f"{repr(ex)} at unknown location", "PY_EX", "31")
 # endregion
 
 # region Randomness
@@ -187,6 +187,7 @@ REQUESTS = {}
 # region Discord
 discord_client = discord.Client(intents=discord.Intents.default())
 discord_command_tree = discord.app_commands.CommandTree(discord_client)
+DISCORD_APP_OWNER_ID = None
 async def guild_verify(interaction: discord.Interaction, already_verified):
     onid_email = DB[interaction.user.id]["onid_email"]
     onid_name = DB[interaction.user.id]["onid_name"]
@@ -200,9 +201,9 @@ async def guild_verify(interaction: discord.Interaction, already_verified):
     if verified_role == None:
         Log_Info(f"Verified @{interaction.user.name} <@{interaction.user.id}> as \"{onid_name}\" {onid_email} on \"{interaction.guild.name}\" {interaction.guild.id} but failed to assign ONID-Verified role because it does not exist.")
         if already_verified:
-            await interaction.followup.send(f"You are already verified however this server doesn't have an \"ONID-Verified\" role to give you. Please reach out to the server administrators to create this role.", ephemeral=True, wait=True)
+            await interaction.followup.send(f"You are already verified however this server doesn't have an \"ONID-Verified\" role to give you. Please reach out to the server administrators to create this role.", ephemeral=True)
         else:
-            await interaction.followup.send(f"You have been successfully verified however this server doesn't have an \"ONID-Verified\" role to give you. Please reach out to the server administrators to create this role.", ephemeral=True, wait=True)
+            await interaction.followup.send(f"You have been successfully verified however this server doesn't have an \"ONID-Verified\" role to give you. Please reach out to the server administrators to create this role.", ephemeral=True)
         return
 
     try:
@@ -210,9 +211,9 @@ async def guild_verify(interaction: discord.Interaction, already_verified):
     except discord.errors.Forbidden as ex:
         Log_Info(f"Failed to assign ONID-Verified role to @{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} due to insufficient permissions.")
         if already_verified:
-            await interaction.followup.send(f"You are already verified however {discord_client.user.mention} doesn't have permission to assign you the ONID-Verified role. Please reach out to the server administrators to grant {discord_client.user.mention} this permission.", ephemeral=True, wait=True)
+            await interaction.followup.send(f"You are already verified however {discord_client.user.mention} doesn't have permission to assign you the ONID-Verified role. Please reach out to the server administrators to grant {discord_client.user.mention} this permission.", ephemeral=True)
         else:
-            await interaction.followup.send(f"You have been successfully verified however {discord_client.user.mention} doesn't have permission to assign you the ONID-Verified role. Please reach out to the server administrators to grant {discord_client.user.mention} this permission.", ephemeral=True, wait=True)
+            await interaction.followup.send(f"You have been successfully verified however {discord_client.user.mention} doesn't have permission to assign you the ONID-Verified role. Please reach out to the server administrators to grant {discord_client.user.mention} this permission.", ephemeral=True)
         return
 
     try:
@@ -221,9 +222,9 @@ async def guild_verify(interaction: discord.Interaction, already_verified):
         Log_Info(f"Failed to nick @{interaction.user.name} <@{interaction.user.id}> to \"{onid_name}\" on \"{interaction.guild.name}\" {interaction.guild.id} due to insufficient permissions.")
 
     if already_verified:
-        await interaction.followup.send(f"You are already verified as \"{onid_name}\" {onid_email}. The ONID-Verified role has been assigned to you on this server.", ephemeral=True, wait=True)
+        await interaction.followup.send(f"You are already verified as \"{onid_name}\" {onid_email}. The ONID-Verified role has been assigned to you on this server.", ephemeral=True)
     else:
-        await interaction.followup.send(f"You have successfully verified as \"{onid_name}\" {onid_email}.", ephemeral=True, wait=True)
+        await interaction.followup.send(f"You have successfully verified as \"{onid_name}\" {onid_email}.", ephemeral=True)
 
     Log_Info(f"Verified @{interaction.user.name} <@{interaction.user.id}> as \"{onid_name}\" {onid_email} on \"{interaction.guild.name}\" {interaction.guild.id}.")
 class ButtonsView(discord.ui.View):
@@ -232,23 +233,23 @@ class ButtonsView(discord.ui.View):
     @discord.ui.button(label="Enter ONID Email!", style=discord.ButtonStyle.primary, emoji="\U00000031\U0000fe0f\U000020e3", custom_id="get_code_button")
     async def get_code_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
-            if interaction.user.id in DB and interaction.user.id != discord_client.application.owner.id:
+            if interaction.user.id in DB and interaction.user.id != DISCORD_APP_OWNER_ID:
                 await interaction.response.defer(ephemeral=True)
                 await guild_verify(interaction, already_verified=True)
             else:
                 await interaction.response.send_modal(OnidInputModal())
-        except BaseException as ex:
+        except Exception as ex:
             Log_Exception(ex)
             raise ex
     @discord.ui.button(label="Enter Verification Code!", style=discord.ButtonStyle.primary, emoji="\U00000032\U0000fe0f\U000020e3", custom_id="enter_code_button")
     async def enter_code_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
-            if interaction.user.id in DB and interaction.user.id != discord_client.application.owner.id:
+            if interaction.user.id in DB and interaction.user.id != DISCORD_APP_OWNER_ID:
                 await interaction.response.defer(ephemeral=True)
                 await guild_verify(interaction, already_verified=True)
             else:
                 await interaction.response.send_modal(CodeInputModal())
-        except BaseException as ex:
+        except Exception as ex:
             Log_Exception(ex)
             raise ex
 class OnidInputModal(discord.ui.Modal):
@@ -257,24 +258,25 @@ class OnidInputModal(discord.ui.Modal):
     onid_input = discord.ui.TextInput(label="Enter your ONID email address:", placeholder="onid@oregonstate.edu", required=True, custom_id="onid_text_input")
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            if interaction.user.id in DB and interaction.user.id != discord_client.application.owner.id:
+            if interaction.user.id in DB and interaction.user.id != DISCORD_APP_OWNER_ID:
+                Log_Error(f"Refusing to submit OnidInputModal because @{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} is already verified.")
                 return # Hard bail and fail interaction
             await interaction.response.defer(ephemeral=True)
             onid_email = str(self.onid_input.value).strip().lower()
             if not onid_email.endswith("@oregonstate.edu") or len(onid_email) <= len("@oregonstate.edu"):
-                await interaction.followup.send(f"The ONID you entered doesn't look quite right. Please try again.", ephemeral=True, wait=True)
+                await interaction.followup.send(f"The ONID you entered doesn't look quite right. Please try again.", ephemeral=True)
                 return
             onid_name = OSU_LookupOnidName(onid_email)
             if onid_name == None:
-                await interaction.followup.send(f"The ONID you entered doesn't look quite right. Please try again.", ephemeral=True, wait=True)
+                await interaction.followup.send(f"The ONID you entered doesn't look quite right. Please try again.", ephemeral=True)
                 return
             code = GetRandomCode()
             request = { "time": IO_GetEpoch(), "code": code, "onid_email": onid_email, "onid_name": onid_name }
             REQUESTS[interaction.user.id] = request
             Log_Info(f"Created code {code} for @{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} for \"{onid_name}\" {onid_email}")
             SMTP_SendCode(onid_email, code)
-            await interaction.followup.send(f"A verification code has been sent to **{onid_email}**.\n\nCodes can take up to 5 minutes to arive. Check your **SPAM** folder before requesting a new code.", ephemeral=True, wait=True)
-        except BaseException as ex:
+            await interaction.followup.send(f"A verification code has been sent to **{onid_email}**.\n\nCodes can take up to 5 minutes to arive. Check your **SPAM** folder before requesting a new code.", ephemeral=True)
+        except Exception as ex:
             Log_Exception(ex)
             raise ex
 class CodeInputModal(discord.ui.Modal):
@@ -283,34 +285,37 @@ class CodeInputModal(discord.ui.Modal):
     code_input = discord.ui.TextInput(label="Enter your verification code:", placeholder="ABC123", required=True, custom_id="code_text_input")
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            if interaction.user.id in DB and interaction.user.id != discord_client.application.owner.id:
+            if interaction.user.id in DB and interaction.user.id != DISCORD_APP_OWNER_ID:
+                Log_Error(f"Refusing to submit CodeInputModal because @{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} is already verified.")
                 return # Hard bail and fail interaction
             await interaction.response.defer(ephemeral=True)
             code = str(self.code_input.value).strip().upper()
             if not len(code) == 6 or not all([ c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" for c in code ]):
-                await interaction.followup.send(f"The code you entered doesn't look quite right. It may have expired. Please try again.", ephemeral=True, wait=True)
+                await interaction.followup.send(f"The code you entered doesn't look quite right. It may have expired. Please try again.", ephemeral=True)
                 return
             request = None
             if interaction.user.id in REQUESTS:
                 request = REQUESTS[interaction.user.id]
             if request == None or request["code"] != code or IO_GetEpoch() - request["time"] > 900.0:
-                await interaction.followup.send(f"The code you entered doesn't look quite right. It may have expired. Please try again.", ephemeral=True, wait=True)
+                await interaction.followup.send(f"The code you entered doesn't look quite right. It may have expired. Please try again.", ephemeral=True)
                 return
             DB[interaction.user.id] = { "onid_email": request["onid_email"], "onid_name": request["onid_name"], "notes": "" }
             DB_Save()
             del REQUESTS[interaction.user.id]
             await guild_verify(interaction, already_verified=False)
-        except BaseException as ex:
+        except Exception as ex:
             Log_Exception(ex)
             raise ex
 @discord_client.event
 async def on_ready():
+    global DISCORD_APP_OWNER_ID
     try:
+        DISCORD_APP_OWNER_ID = discord_client.application.owner.id
         await discord_command_tree.sync()
         discord_client.add_view(ButtonsView())
         await discord_client.change_presence(activity=discord.CustomActivity("Verifying ONID email addresses..."), status=discord.Status.online)
         Log_Info(f"Online as {discord_client.user}")
-    except BaseException as ex:
+    except Exception as ex:
         Log_Exception(ex)
         raise ex
 @discord_client.event
@@ -321,30 +326,30 @@ async def post_verification_buttons(interaction: discord.Interaction):
     try:
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.guild_permissions.administrator:
-            await interaction.followup.send("You need the administrator permission in this server to run this command.", wait=True)
+            await interaction.followup.send("You need the administrator permission in this server to run this command.")
             return
         try:
             await interaction.channel.send("", view=ButtonsView())
         except discord.errors.Forbidden as ex:
                 Log_Info(f"Failed to post verification buttons on \"{interaction.guild.name}\" {interaction.guild.id} due to insufficient permissions.")
-                await interaction.followup.send(f"{discord_client.user.mention} does not have permission to post messages in this channel and therefore could not post the verification buttons.", ephemeral=True, wait=True)
+                await interaction.followup.send(f"{discord_client.user.mention} does not have permission to post messages in this channel and therefore could not post the verification buttons.", ephemeral=True)
                 return
-        await interaction.followup.send("Done!", wait=True)
-    except BaseException as ex:
+        await interaction.followup.send("Done!")
+    except Exception as ex:
         Log_Exception(ex)
         raise ex
 @discord_command_tree.command(name="get_verification_info", description="Prints weather a given Discord account is ONID verified.")
-async def get_verification_info(interaction: discord.Interaction, user: discord.Member):
+async def get_verification_info(interaction: discord.Interaction, user: discord.User):
     try:
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.id in DB:
-            await interaction.followup.send("You must be verified by ONIDbot to run this command.", ephemeral=True, wait=True)
+            await interaction.followup.send("You must be verified by ONIDbot to run this command.", ephemeral=True)
             return
         if user.id in DB:
-            await interaction.followup.send(f"{user.mention} is verified as \"{DB[user.id]['onid_name']}\" {DB[user.id]['onid_email']}.", ephemeral=True, wait=True)
+            await interaction.followup.send(f"{user.mention} is verified as \"{DB[user.id]['onid_name']}\" {DB[user.id]['onid_email']}.", ephemeral=True)
         else:
-            await interaction.followup.send(f"{user.mention} is not verified.", ephemeral=True, wait=True)
-    except BaseException as ex:
+            await interaction.followup.send(f"{user.mention} is not verified.", ephemeral=True)
+    except Exception as ex:
         Log_Exception(ex)
         raise ex
 # endregion
@@ -412,7 +417,7 @@ def Main():
         asyncio.run(CLUSTER_Run())
     except KeyboardInterrupt:
         sys.exit(0)
-    except BaseException as ex:
+    except Exception as ex:
         Log_Exception(ex)
         sys.exit(1)
 Main()
