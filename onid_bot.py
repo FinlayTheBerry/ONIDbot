@@ -10,9 +10,7 @@ import sys
 import secrets
 import smtplib
 from email.message import EmailMessage
-import asyncio
 import time
-import socket
 
 # Bot authentication url:
 # https://discord.com/oauth2/authorize?client_id={CLIENTID}
@@ -32,14 +30,17 @@ def IO_ReadFile(filePath, defaultContents=None, binary=False):
         return defaultContents
     with open(filePath, "rb" if binary else "r", encoding=None if binary else "utf-8") as f:
         return f.read()
+def IO_AppendFile(filePath, contents, binary=False):
+    filePath = IO_RealPath(filePath)
+    with open(filePath, "ab" if binary else "a", encoding=None if binary else "utf-8") as f:
+        f.write(contents)
 def IO_SerializeJson(obj, compact=False):
     return json.dumps(obj, indent=None if compact else 4)
 def IO_DeserializeJson(jsonString):
     return json.loads(jsonString)
 def IO_GetEpoch():
     return time.time() + time.localtime().tm_gmtoff
-def IO_GetTime():
-    epoch = IO_GetEpoch()
+def IO_FormatEpoch(epoch):
     timestamp = datetime.fromtimestamp(epoch, tz=timezone.utc)
     return timestamp.strftime("%I:%M%p %m/%d").lower()
 # endregion
@@ -47,13 +48,10 @@ def IO_GetTime():
 # region Logs
 def Log_Generic(message, log_type, ansi_color):
     padding = " " * (8 - len(log_type)) if len(log_type) < 8 else ""
-    formatted_message = f"{log_type}{padding}({IO_GetTime()} {int(IO_GetEpoch())}): {message}"
+    formatted_message = f"{log_type}{padding}({IO_FormatEpoch(IO_GetEpoch())} {int(IO_GetEpoch())}): {message}"
     print(f"\033[{ansi_color}m{formatted_message}\033[0m", flush=True)
     log_path = os.path.join(IO_GetScriptDir(), "log.txt")
-    log_contents = ""
-    if os.path.exists(log_path):
-        log_contents = IO_ReadFile(log_path)
-    IO_WriteFile(log_path, log_contents + f"{formatted_message}\n")
+    IO_AppendFile(log_path, f"{formatted_message}\n")
 def Log_Info(message):
     Log_Generic(message, "Info", "37")
 def Log_Warning(message):
@@ -99,23 +97,18 @@ def Env_Load():
 Env_Load()
 # endregion
 
-# Working with the main user database.
+# region Database
 DB = None
 def DB_Load():
     global DB
     db_path = os.path.join(IO_GetScriptDir(), "database.json")
-    if os.path.isfile(db_path):
-        DB = IO_DeserializeJson(IO_ReadFile(db_path))
-        DB = { int(key): value for key, value in DB.items() }
-    else:
-        DB = {}
-        DB_Save()
+    DB = IO_DeserializeJson(IO_ReadFile(db_path))
+    DB = { int(key): value for key, value in DB.items() }
 def DB_Backup():
     db_path = os.path.join(IO_GetScriptDir(), "database.json")
     backup_file_name = f"backups/{int(IO_GetEpoch())}.json"
     backup_path = os.path.join(IO_GetScriptDir(), backup_file_name)
     IO_WriteFile(backup_path, IO_ReadFile(db_path))
-    Log_Info(f"Backed up database.json to {backup_file_name}.")
 def DB_Save():
     db_path = os.path.join(IO_GetScriptDir(), "database.json")
     IO_WriteFile(db_path, IO_SerializeJson(DB))
@@ -129,6 +122,8 @@ def DB_Save():
             latest_backup_time = backup_time
     if int(IO_GetEpoch()) - latest_backup_time > 24 * 60 * 60:
         DB_Backup()
+DB_Load()
+# endregion
 
 # region OSU API
 def OSU_LookupOnidName(onid_email):
@@ -152,10 +147,10 @@ def OSU_LookupOnidName(onid_email):
     # Return output or None
     if len(data) == 1:
         output = f"{data[0]['attributes']['firstName']} {data[0]['attributes']['lastName']}"
-        Log_Info(f"OSU directory lookup for {onid_email} returned {output}.")
+        Log_Info(f"OSU directory lookup for \"{onid_email}\" returned \"{output}\".")
         return output
     else:
-        Log_Warning(f"OSU directory lookup for {onid_email} returned no data.")
+        Log_Warning(f"OSU directory lookup for \"{onid_email}\" returned no data.")
         return None
 # endregion
 
@@ -199,7 +194,7 @@ async def guild_verify(interaction: discord.Interaction, already_verified):
             break
 
     if verified_role == None:
-        Log_Info(f"Verified @{interaction.user.name} <@{interaction.user.id}> as \"{onid_name}\" {onid_email} on \"{interaction.guild.name}\" {interaction.guild.id} but failed to assign ONID-Verified role because it does not exist.")
+        Log_Warning(f"Verified @{interaction.user.name} <@{interaction.user.id}> as \"{onid_name}\" {onid_email} on \"{interaction.guild.name}\" {interaction.guild.id} but failed to assign ONID-Verified role because it does not exist.")
         if already_verified:
             await interaction.followup.send(f"You are already verified however this server doesn't have an \"ONID-Verified\" role to give you. Please reach out to the server administrators to create this role.", ephemeral=True)
         else:
@@ -209,7 +204,7 @@ async def guild_verify(interaction: discord.Interaction, already_verified):
     try:
         await interaction.user.add_roles(verified_role)
     except discord.errors.Forbidden as ex:
-        Log_Info(f"Failed to assign ONID-Verified role to @{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} due to insufficient permissions.")
+        Log_Warning(f"Failed to assign ONID-Verified role to @{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} due to insufficient permissions.")
         if already_verified:
             await interaction.followup.send(f"You are already verified however {discord_client.user.mention} doesn't have permission to assign you the ONID-Verified role. Please reach out to the server administrators to grant {discord_client.user.mention} this permission.", ephemeral=True)
         else:
@@ -219,21 +214,38 @@ async def guild_verify(interaction: discord.Interaction, already_verified):
     try:
         await interaction.user.edit(nick=onid_name)
     except discord.errors.Forbidden as ex:
-        Log_Info(f"Failed to nick @{interaction.user.name} <@{interaction.user.id}> to \"{onid_name}\" on \"{interaction.guild.name}\" {interaction.guild.id} due to insufficient permissions.")
+        Log_Warning(f"Failed to nick @{interaction.user.name} <@{interaction.user.id}> to \"{onid_name}\" {onid_email} on \"{interaction.guild.name}\" {interaction.guild.id} due to insufficient permissions.")
 
+    Log_Info(f"Verified @{interaction.user.name} <@{interaction.user.id}> as \"{onid_name}\" {onid_email} on \"{interaction.guild.name}\" {interaction.guild.id}.")
     if already_verified:
         await interaction.followup.send(f"You are already verified as \"{onid_name}\" {onid_email}. The ONID-Verified role has been assigned to you on this server.", ephemeral=True)
     else:
         await interaction.followup.send(f"You have successfully verified as \"{onid_name}\" {onid_email}.", ephemeral=True)
+async def guild_unverify(interaction: discord.Interaction):
+    verified_role = None
+    for guild_role in interaction.guild.roles:
+        if guild_role.name == "ONID-Verified":
+            verified_role = guild_role
+            break
 
-    Log_Info(f"Verified @{interaction.user.name} <@{interaction.user.id}> as \"{onid_name}\" {onid_email} on \"{interaction.guild.name}\" {interaction.guild.id}.")
+    if verified_role == None:
+        await interaction.followup.send(f"This server doesn't have an \"ONID-Verified\" role.", ephemeral=True)
+
+    try:
+        await interaction.user.remove_roles(verified_role)
+    except discord.errors.Forbidden as ex:
+        await interaction.followup.send(f"Failed to remove ONID-Verified role due to insufficient permissions.", ephemeral=True)
+        return
+    await interaction.followup.send(f"Done!", ephemeral=True)
 class ButtonsView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
     @discord.ui.button(label="Enter ONID Email!", style=discord.ButtonStyle.primary, emoji="\U00000031\U0000fe0f\U000020e3", custom_id="get_code_button")
     async def get_code_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
-            if interaction.user.id in DB and interaction.user.id != DISCORD_APP_OWNER_ID:
+            already_verified = interaction.user.id in DB and interaction.user.id != DISCORD_APP_OWNER_ID
+            Log_Info(f"@{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} pressed enter onid button and {'is' if already_verified else 'is not'} already verified.")
+            if already_verified:
                 await interaction.response.defer(ephemeral=True)
                 await guild_verify(interaction, already_verified=True)
             else:
@@ -244,7 +256,9 @@ class ButtonsView(discord.ui.View):
     @discord.ui.button(label="Enter Verification Code!", style=discord.ButtonStyle.primary, emoji="\U00000032\U0000fe0f\U000020e3", custom_id="enter_code_button")
     async def enter_code_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
-            if interaction.user.id in DB and interaction.user.id != DISCORD_APP_OWNER_ID:
+            already_verified = interaction.user.id in DB and interaction.user.id != DISCORD_APP_OWNER_ID
+            Log_Info(f"@{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} pressed enter code button and {'is' if already_verified else 'is not'} already verified.")
+            if already_verified:
                 await interaction.response.defer(ephemeral=True)
                 await guild_verify(interaction, already_verified=True)
             else:
@@ -258,16 +272,19 @@ class OnidInputModal(discord.ui.Modal):
     onid_input = discord.ui.TextInput(label="Enter your ONID email address:", placeholder="onid@oregonstate.edu", required=True, custom_id="onid_text_input")
     async def on_submit(self, interaction: discord.Interaction):
         try:
+            Log_Info(f"@{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} submitted onid input \"{self.onid_input.value}\".")
             if interaction.user.id in DB and interaction.user.id != DISCORD_APP_OWNER_ID:
                 Log_Error(f"Refusing to submit OnidInputModal because @{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} is already verified.")
                 return # Hard bail and fail interaction
             await interaction.response.defer(ephemeral=True)
             onid_email = str(self.onid_input.value).strip().lower()
             if not onid_email.endswith("@oregonstate.edu") or len(onid_email) <= len("@oregonstate.edu"):
+                Log_Info(f"@{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} submitted invalid onid input \"{self.onid_input.value}\".")
                 await interaction.followup.send(f"The ONID you entered doesn't look quite right. Please try again.", ephemeral=True)
                 return
             onid_name = OSU_LookupOnidName(onid_email)
             if onid_name == None:
+                Log_Info(f"@{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} submitted invalid onid input \"{self.onid_input.value}\".")
                 await interaction.followup.send(f"The ONID you entered doesn't look quite right. Please try again.", ephemeral=True)
                 return
             code = GetRandomCode()
@@ -285,22 +302,35 @@ class CodeInputModal(discord.ui.Modal):
     code_input = discord.ui.TextInput(label="Enter your verification code:", placeholder="ABC123", required=True, custom_id="code_text_input")
     async def on_submit(self, interaction: discord.Interaction):
         try:
+            Log_Info(f"@{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} submitted code input \"{self.code_input.value}\".")
             if interaction.user.id in DB and interaction.user.id != DISCORD_APP_OWNER_ID:
                 Log_Error(f"Refusing to submit CodeInputModal because @{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} is already verified.")
                 return # Hard bail and fail interaction
             await interaction.response.defer(ephemeral=True)
             code = str(self.code_input.value).strip().upper()
+            if interaction.user.id == DISCORD_APP_OWNER_ID and code == "UNVERIFY":
+                await guild_unverify(interaction)
+                return
             if not len(code) == 6 or not all([ c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" for c in code ]):
+                Log_Info(f"@{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} submitted invalid code input \"{self.code_input.value}\".")
                 await interaction.followup.send(f"The code you entered doesn't look quite right. It may have expired. Please try again.", ephemeral=True)
                 return
             request = None
             if interaction.user.id in REQUESTS:
                 request = REQUESTS[interaction.user.id]
             if request == None or request["code"] != code or IO_GetEpoch() - request["time"] > 900.0:
+                if request == None:
+                    Log_Info(f"@{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} submitted invalid code input \"{self.code_input.value}\" reason no code for that user.")
+                elif request["code"] != code:
+                    Log_Info(f"@{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} submitted invalid code input \"{self.code_input.value}\" reason expired.")
+                elif IO_GetEpoch() - request["time"] > 900.0:
+                    Log_Info(f"@{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} submitted invalid code input \"{self.code_input.value}\" reason wrong code.")
                 await interaction.followup.send(f"The code you entered doesn't look quite right. It may have expired. Please try again.", ephemeral=True)
                 return
+            Log_Info(f"@{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} has been verified as \"{request['onid_name']}\" {request['onid_email']} in DB.")
             DB[interaction.user.id] = { "onid_email": request["onid_email"], "onid_name": request["onid_name"], "notes": "" }
             DB_Save()
+            Log_Info(f"@{interaction.user.name} <@{interaction.user.id}> on \"{interaction.guild.name}\" {interaction.guild.id} deleting code {request['code']}.")
             del REQUESTS[interaction.user.id]
             await guild_verify(interaction, already_verified=False)
         except Exception as ex:
@@ -324,6 +354,7 @@ async def on_guild_join(guild: discord.Guild):
 @discord_command_tree.command(name="post_verification_buttons", description="Posts the verification buttons to the current channel.")
 async def post_verification_buttons(interaction: discord.Interaction):
     try:
+        Log_Info(f"<@{interaction.user.id}> ran post_verification_buttons.")
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.guild_permissions.administrator:
             await interaction.followup.send("You need the administrator permission in this server to run this command.")
@@ -341,6 +372,7 @@ async def post_verification_buttons(interaction: discord.Interaction):
 @discord_command_tree.command(name="get_verification_info", description="Prints weather a given Discord account is ONID verified.")
 async def get_verification_info(interaction: discord.Interaction, user: discord.User):
     try:
+        Log_Info(f"<@{interaction.user.id}> ran get_verification_info on <@{user.id}>.")
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.id in DB:
             await interaction.followup.send("You must be verified by ONIDbot to run this command.", ephemeral=True)
@@ -354,67 +386,10 @@ async def get_verification_info(interaction: discord.Interaction, user: discord.
         raise ex
 # endregion
 
-# region Launch Time Cluster
-START_TIME = IO_GetEpoch()
-IS_PRIMARY = False
-async def CLUSTER_GetLaunchTime(hostname):
-    try:
-        reader, writer = await asyncio.wait_for(asyncio.open_connection(hostname, ENV["cluster_port"]), timeout=2.0)
-        data = await reader.read(256)
-        writer.close()
-        await writer.wait_closed()
-        return float(data.decode().strip())
-    except Exception:
-        return float("inf")
-async def CLUSTER_HandleRequest(reader, writer):
-    try:
-        writer.write(str(START_TIME).encode())
-        await writer.drain()
-    finally:
-        writer.close()
-        await writer.wait_closed()
-async def CLUSTER_Run():
-    global IS_PRIMARY
-
-    my_hostname = socket.gethostname()
-
-    cluster_state = {}
-    for hostname in ENV["cluster_hostnames"]:
-        if hostname == my_hostname:
-            continue
-        cluster_state[hostname] = (await CLUSTER_GetLaunchTime(hostname)) == float("inf")
-
-    async with await asyncio.start_server(CLUSTER_HandleRequest, "0.0.0.0", ENV["cluster_port"]):
-        print(f"Joined cluster on {my_hostname}:{ENV['cluster_port']}...")
-
-        while True:
-            min_peer_launch_time = float("inf")
-            for hostname in ENV["cluster_hostnames"]:
-                if hostname == my_hostname:
-                    continue
-
-                peer_launch_time = await CLUSTER_GetLaunchTime(hostname)
-                if peer_launch_time < min_peer_launch_time:
-                    min_peer_launch_time = peer_launch_time
-
-                if cluster_state[hostname] != (peer_launch_time == float("inf")) and IS_PRIMARY:
-                    Log_Warning(f"Hostname {hostname} is now {'down' if (peer_launch_time == float('inf')) else 'up'}.")
-                cluster_state[hostname] = peer_launch_time == float("inf")
-
-            if START_TIME < min_peer_launch_time:
-                if not IS_PRIMARY:
-                    IS_PRIMARY = True
-                    Log_Info(f"{my_hostname} Taking over as primary...")
-                    DB_Load()
-                    asyncio.create_task(discord_client.start(ENV["discord_token"]))
-
-            await asyncio.sleep(ENV["heartbeat_interval"])
-# endregion
-
 # region Main
 def Main():
     try:
-        asyncio.run(CLUSTER_Run())
+        discord_client.run(ENV["discord_token"])
     except KeyboardInterrupt:
         sys.exit(0)
     except Exception as ex:
