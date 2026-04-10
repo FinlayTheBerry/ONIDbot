@@ -1,48 +1,44 @@
 #!/usr/bin/python
 
 import socket
-import sys
 import os
 
-# region Environment
-ENV = None
-def Env_Load():
-    env_path = os.path.join(IO_GetScriptDir(), "environment.json")
-    if os.stat(env_path).st_mode != 33152:
-        raise Exception("Insecure permissions on environment.json. Try chmod 600 environment.json")
-    ENV = IO_DeserializeJson(IO_ReadFile(env_path))
-# Env_Load() # TODO
-# endregion
+PORT = 51185
+HOSTNAMES = [
+    "flip1.engr.oregonstate.edu",
+    "flip2.engr.oregonstate.edu",
+    "flip3.engr.oregonstate.edu",
+    "flip4.engr.oregonstate.edu"
+]
+CHARSET = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+MAXLENGTH = 4096
 
 def Main():
-    print("Content-Type: text/plain")
-    print("")
-    if len(sys.argv) != 2:
-        print("ERROR: Bad arg count.")
-        print(sys.argv)
-        return
-    code = sys.argv[1]
-    hosts = [
-        "flip4.engr.oregonstate.edu",
-        "flip3.engr.oregonstate.edu",
-        "flip2.engr.oregonstate.edu",
-        "flip1.engr.oregonstate.edu"
-    ]
-    port = 12345
-    for host in hosts:
+    code = os.environ.get("QUERY_STRING", "")
+    if code == "":
+        return "{ \"success\": false, \"message\": \"No verification code provided in command line args.\" }"
+    if len(code) > MAXLENGTH:
+        return "{ \"success\": false, \"message\": \"Verification code is too long.\" }"
+    if not set(code).issubset(CHARSET):
+        return "{ \"success\": false, \"message\": \"Verification code contains invalid characters.\" }"
+    for hostname in HOSTNAMES:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             sock.settimeout(1.0) # Host needs to connect within 1 second
-            sock.connect((host, port))
+            sock.connect((hostname, PORT))
             sock.settimeout(60.0) # Host can have up to 60 seconds to reply once connected
-            sock.sendall(code.encode("utf-8"))
-            response = sock.recv(1024).decode("utf-8")
-            print(response)
-            return
+            sock.sendall(code.encode("ascii"))
+            response = sock.recv(MAXLENGTH).decode("ascii")
+            return response
         except:
             continue
         finally:
             sock.close()
-    print("ERROR: All hosts down.")
-    return
-Main()
+    return "{ \"success\": false, \"message\": \"All API servers down! Please DM @finlay_the_berry to report this issue.\" }"
+
+print("Content-Type: text/plain")
+print("")
+try:
+    print(Main())
+except Exception as ex:
+    print("{ \"success\": false, \"message\": \"" + repr(ex) + "\" }")
