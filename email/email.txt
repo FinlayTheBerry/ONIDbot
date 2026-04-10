@@ -1,5 +1,6 @@
-Your ONIDbot verification code is: ##CODE##
-This code will expire in 15 minutes.
-If you did not request this code, you can safely ignore this email.
+Click the following link to finish verifying your OSU student status.
+https://web.engr.oregonstate.edu/~christj/ONIDbot/Verify?##CODE##
+This link will expire in 15 minutes.
+If you did not request this link, you can safely ignore this email.
 Report abuse to christj@oregonstate.edu
 Sent by ONIDbot

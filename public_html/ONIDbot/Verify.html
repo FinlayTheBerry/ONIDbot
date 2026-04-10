@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="icon" type="image/x-icon" href="./favicons/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="./favicons/180x180.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="./favicons/512x512.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./favicons/192x192.png">
+  <link rel="icon" type="image/png" sizes="180x180" href="./favicons/180x180.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="./favicons/32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="./favicons/16x16.png">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>ONIDbot - Get Verified!</title>
+  <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+</head>
+<body style="margin: 0px; padding: 0px; font-family: 'Verdana', sans-serif; color: #202124; display: flex; justify-content: center; align-items: center; min-height: 100vh;">
+  <div style="width: 600px; max-width: calc(100% - 40px); margin: 0px auto 16px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0, 0, 0, .4);">
+    <div style="background-color: #d73f09; padding: 30px; text-align: center;">
+      <h1 style="margin: 0px; font-size: 24px; letter-spacing: 1px; color: #ffffff;">Get Verified! - ONIDbot</h1>
+    </div>
+    <div style="padding: 30px; line-height: 1.6;">
+      <div id="loading-container" style="text-align: center;">
+        <div style="box-sizing: border-box; border: 5px solid #acaeb1; border-top: 5px solid #d73f09; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 0px auto 15px auto;"></div>
+        <h2 style="margin-top: 0px; font-size: 22px;">Verifying...</h2>
+        <p class="message" style="min-height: 3.2em; margin-bottom: 0px; font-size: 16px; line-height: 1.6;">Please wait we process your request...</p>
+      </div>
+      <div id="success-container" style="display: none; text-align: center;">
+        <img src="./icons/check.png" alt="Success" style="width: 50px; height: 50px; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto;">
+        <h2 style="margin-top: 0px; font-size: 22px;">Verified!</h2>
+        <p class="message" style="min-height: 3.2em; margin-bottom: 0px; font-size: 16px; line-height: 1.6;">You have been verified with <strong>ONIDbot</strong>. You can safely close this window and return to Discord.</p>
+      </div>
+      <div id="error-container" style="display: none; text-align: center;">
+        <img src="./icons/x.png" alt="Success" style="width: 50px; height: 50px; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto;">
+        <h2 style="margin-top: 0px; font-size: 22px;">Verification Failed!</h2>
+        <p class="message" style="min-height: 3.2em; margin-bottom: 0px; font-size: 16px; line-height: 1.6;">The link may have expired or is invalid. Please try requesting a new link from ONIDbot.</p>
+      </div>
+    </div>
+    <div style="color: #5f6368; padding: 20px; text-align: center; font-size: 12px; background-color: #f8f9fa; border-top: 1px solid #e0e0e0;">
+      <p>Report abuse to <strong><a style="color: inherit; text-decoration: none;" href="mailto:christj@oregonstate.edu?subject=ONIDbot Abuse Report&body=Description of abusive behavior (e.g. email spam)...">christj@oregonstate.edu</a></strong></p>
+      <p>Powered by <strong>ONIDbot</strong></p>
+    </div>
+  </div>
+<script>
+  window.onload = async function () {
+    try{
+      const code = window.location.href.includes("?") ? window.location.href.substring(window.location.href.indexOf("?") + 1) : "";
+      if (!code) {
+        throw new Error("No verification code found in URL.");
+      }
+      const apiUrl = `https://web.engr.oregonstate.edu/cgi-bin/cgiwrap/~christj/ONIDbot/Verify?${code}`;
+      const response = await fetch(apiUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP error. Status code ${response.status}.`);
+      }
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.message);
+      }
+      const loading_container = document.querySelector("#loading-container");
+      loading_container.style.display = "none";
+      const success_container = document.querySelector("#success-container");
+      success_container.style.display = "block";
+      success_container.querySelector(".message").innerHTML = data.message;
+    } catch (err) {
+      const loading_container = document.querySelector("#loading-container");
+      loading_container.style.display = "none";
+      const error_container = document.querySelector("#error-container");
+      error_container.style.display = "block";
+      error_container.querySelector(".message").innerHTML = String(err);
+    }
+  };
+</script>
+</body>
+</html>
