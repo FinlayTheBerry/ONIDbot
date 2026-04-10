@@ -3,11 +3,10 @@
 import json
 import os
 import requests
-from datetime import datetime, timezone
+import datetime
 import time
 import discord
 import sys
-import secrets
 import smtplib
 from email.message import EmailMessage
 import time
@@ -41,7 +40,7 @@ def IO_DeserializeJson(jsonString):
 def IO_GetEpoch():
     return time.time() + time.localtime().tm_gmtoff
 def IO_FormatEpoch(epoch):
-    timestamp = datetime.fromtimestamp(epoch, tz=timezone.utc)
+    timestamp = datetime.datetime.fromtimestamp(epoch, tz=datetime.timezone.utc)
     return timestamp.strftime("%I:%M%p %m/%d").lower()
 # endregion
 
