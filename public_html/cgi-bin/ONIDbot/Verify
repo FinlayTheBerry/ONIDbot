@@ -1,15 +1,18 @@
 #!/usr/bin/python
 
 import socket
+import errno
 import os
 import json
 import time
 import datetime
-import sys
 # PYTHON2 - open does not support encoding.
 import codecs
+import urllib
 
-ROOT = "/nfs/stak/users/christj/onid_bot_dev"
+DEV = True
+ROOT = "/nfs/stak/users/christj/onid_bot"
+DEVROOT = "/nfs/stak/users/christj/onid_bot_dev"
 
 # region File IO
 def IO_RealPath(filePath):
@@ -28,7 +31,7 @@ def IO_WriteFile(filePath, contents, binary=False):
 def IO_ReadFile(filePath, defaultContents=None, binary=False):
     filePath = IO_RealPath(filePath)
     if defaultContents != None and not os.path.exists(filePath):
-        return defaultContents    
+        return defaultContents
     if binary:
         with open(filePath, "rb") as f:
             return f.read()
@@ -57,24 +60,21 @@ def IO_FormatEpoch(epoch):
 # endregion
 
 # region Logs
-def Log_Generic(message, log_type, ansi_color):
+def LOG_Generic(message, log_type):
     padding = " " * (8 - len(log_type)) if len(log_type) < 8 else ""
     # PYTHON2 - Fstrings are not supported.
     formatted_message = log_type + padding + "(" + IO_FormatEpoch(IO_GetEpoch()) + " " + str(int(IO_GetEpoch())) + "): " + message
-    # PYTHON2 - Fstrings are not supported.
-    print("\033[" + ansi_color + "m" + formatted_message + "\033[0m")
-    # PYTHON2 - Print does not support flush=True.
-    sys.stdout.flush()
-    log_path = os.path.join(ROOT, "log.txt")
+    # CGIBIN - Output goes to user and should not include internal logs so no print.
+    log_path = os.path.join(DEVROOT if DEV else ROOT, "log.txt")
     # PYTHON2 - Fstrings are not supported.
     IO_AppendFile(log_path, formatted_message + "\n")
-def Log_Info(message):
-    Log_Generic(message, "Info", "37")
-def Log_Warning(message):
-    Log_Generic(message, "Warning", "33")
-def Log_Error(message):
-    Log_Generic(message, "ERROR", "31")
-def Log_Exception(ex):
+def LOG_Info(message):
+    LOG_Generic(message, "Info")
+def LOG_Warning(message):
+    LOG_Generic(message, "Warning")
+def LOG_Error(message):
+    LOG_Generic(message, "ERROR")
+def LOG_Exception(ex):
     tb = ex.__traceback__
     while tb is not None:
         if IO_RealPath(tb.tb_frame.f_code.co_filename) == IO_RealPath(__file__):
@@ -83,50 +83,54 @@ def Log_Exception(ex):
             lineno = tb.tb_lineno
             line = IO_ReadFile(tb.tb_frame.f_code.co_filename).splitlines()[lineno - 1].strip()
             # PYTHON2 - Fstrings are not supported.
-            Log_Generic(message + " in " + funcname + " line " + str(lineno) + ": " + line, "PY_EX", "31")
+            LOG_Generic(message + " in " + funcname + " line " + str(lineno) + ": " + line, "PY_EX")
             return
         tb = tb.tb_next
     # PYTHON2 - Fstrings are not supported.
-    Log_Generic(repr(ex) + " at unknown location", "PY_EX", "31")
+    LOG_Generic(repr(ex) + " at unknown location", "PY_EX")
 # endregion
 
 # region Environment
 ENV = None
-def Env_Load():
+def ENV_Load():
     global ENV
-    env_path = os.path.join(ROOT, "environment.json")
+    env_path = os.path.join(DEVROOT if DEV else ROOT, "environment.json")
     if os.stat(env_path).st_mode != 33152:
         raise Exception("Insecure permissions on environment.json. Try chmod 600 environment.json")
     ENV = IO_DeserializeJson(IO_ReadFile(env_path))
-Env_Load()
 # endregion
 
 def Main():
-    code = os.environ.get("QUERY_STRING", "")
-    if code == "":
-        return "{ \"success\": false, \"message\": \"No verification code provided.\" }"
-    if len(code) > 4096:
-        return "{ \"success\": false, \"message\": \"Verification code is too long.\" }"
-    if not set(code).issubset(set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")):
-        return "{ \"success\": false, \"message\": \"Verification code contains invalid characters.\" }"
+    # Future proof by ensuring no newline delimeters in code.
+    code = os.environ.get("QUERY_STRING", "").replace("\n", "").replace("\r", "")
     for hostname in ENV["api_hosts"]:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock = None
+        sockfile = None
         try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(1.0) # Host needs to connect within 1 second
             sock.connect((hostname, ENV["api_port"]))
             sock.settimeout(60.0) # Host can have up to 60 seconds to reply once connected
-            sock.sendall(code.encode("ascii"))
-            response = sock.recv(4096).decode("ascii")
-            return response
-        except:
-            continue
+            sock.sendall((code + "\n").encode("utf-8"))
+            sockfile = sock.makefile("rb", 0)
+            return sockfile.readline(65536).decode("utf-8").rstrip("\n")
+        except socket.error as ex:
+            if ex.args[0] == errno.ECONNREFUSED:
+                continue
+            else:
+                raise ex
         finally:
-            sock.close()
-    return "{ \"success\": false, \"message\": \"All API servers down! Please DM @finlay_the_berry to report this issue.\" }"
+            if sockfile:
+                sockfile.close()
+            if sock:
+                sock.close()
+    raise Exception("All API servers are down!")
 
-print("Content-Type: text/plain")
+print("Content-Type: application/json")
 print("")
 try:
+    ENV_Load()
     print(Main())
 except Exception as ex:
-    print("{ \"success\": false, \"message\": \"" + repr(ex) + "\" }")
+    LOG_Exception(ex)
+    print("{ \"success\": false, \"message\": \"An fatal server error occured. Please DM @finlay_the_berry to report this issue.\" }")

@@ -42,11 +42,8 @@
   </div>
 <script>
   window.onload = async function () {
-    try{
+    try {
       const code = window.location.href.includes("?") ? window.location.href.substring(window.location.href.indexOf("?") + 1) : "";
-      if (!code) {
-        throw new Error("No verification code found in URL.");
-      }
       const apiUrl = `https://web.engr.oregonstate.edu/cgi-bin/cgiwrap/~christj/ONIDbot/Verify?${code}`;
       const response = await fetch(apiUrl);
       if (!response.ok) {
@@ -60,13 +57,13 @@
       loading_container.style.display = "none";
       const success_container = document.querySelector("#success-container");
       success_container.style.display = "block";
-      success_container.querySelector(".message").innerHTML = data.message;
+      success_container.querySelector(".message").textContent = data.message;
     } catch (err) {
       const loading_container = document.querySelector("#loading-container");
       loading_container.style.display = "none";
       const error_container = document.querySelector("#error-container");
       error_container.style.display = "block";
-      error_container.querySelector(".message").innerHTML = String(err);
+      error_container.querySelector(".message").textContent = String(err);
     }
   };
 </script>
