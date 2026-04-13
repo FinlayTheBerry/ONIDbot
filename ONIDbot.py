@@ -92,6 +92,8 @@ def LOG_Exception(ex):
     LOG_Generic(f"{repr(ex)} at unknown location", "PY_EX", "31")
 def LOG_FormatUser(user):
     return f"User(\"{user.display_name}\", \"{user.name}\", {user.id})"
+def LOG_FormatChannel(channel):
+    return f"Channel(\"{channel.name}\", {channel.id})"
 def LOG_FormatGuild(guild):
     return f"Guild(\"{guild.name}\", {guild.id})"
 # endregion
@@ -131,7 +133,7 @@ def DB_Save():
 # endregion
 
 # region OSU API
-def OSU_LookupOnidName(onid_email):
+def OSU_LookupOnidName(onid_email, raw_data=False):
     # Get a token
     response = requests.post("https://api.oregonstate.edu/oauth2/token", data={"grant_type": "client_credentials"}, auth=(ENV['osu_api_id'], ENV['osu_api_secret']))
     response.raise_for_status()
@@ -144,7 +146,10 @@ def OSU_LookupOnidName(onid_email):
     data = response.json()['data']
 
     # Return output or None
-    if len(data) == 1:
+    if raw_data:
+        LOG_Info(f"OSU API - \"{onid_email}\" - RAW DATA")
+        return IO_SerializeJson(data)
+    elif len(data) == 1:
         output = f"{data[0]['attributes']['firstName']} {data[0]['attributes']['lastName']}"
         LOG_Info(f"OSU API - \"{onid_email}\" - \"{output}\"")
         return output
@@ -326,7 +331,6 @@ async def DIS_GetVerificationInfo(interaction: discord.Interaction, user: discor
         raise
 @discord_command_tree.command(name="debug_verification", description="Used to debug ONIDbot. Restricted to ONIDbot developers only.")
 async def DIS_DebugVerification(interaction: discord.Interaction, command: str):
-    # TODO FIX THIS
     try:
         await interaction.response.defer(ephemeral=True)
         if interaction.user.id != discord_client.application.owner.id:
@@ -335,28 +339,58 @@ async def DIS_DebugVerification(interaction: discord.Interaction, command: str):
             return
 
         try:
-            verb, args = command.split(" ", maxsplit=1)
-            if verb == "TOKEN":
+            command = command.split(" ", maxsplit=1)
+            verb = command[0].lower()
+            args = None
+            if len(command) > 1:
+                args = command[1]
+
+            if verb == "token_info":
                 data = TOKEN_DeserializeAndVerify(args, ignore_expiration=True)
                 await interaction.followup.send(IO_SerializeJson(data), ephemeral=True)
-            elif verb == "GUILD":
-                discord_guild = discord_client.get_guild(args)
-                if discord_guild is None:
-                    discord_guild = await discord_client.fetch_guild(args)
+            elif verb == "dis_get_guild":
+                discord_guild = await discord_client.fetch_guild(int(args))
                 await interaction.followup.send(LOG_FormatGuild(discord_guild), ephemeral=True)
-            elif verb == "USER":
-                discord_user = discord_guild.get_member(args)
-                if discord_user is None:
-                    discord_user = await discord_client.fetch_user(args)
+            elif verb == "dis_get_channel":
+                discord_channel = await discord_client.fetch_channel(int(args))
+                await interaction.followup.send(LOG_FormatChannel(discord_channel), ephemeral=True)
+            elif verb == "dis_get_user":
+                discord_user = await discord_client.fetch_user(int(args))
                 await interaction.followup.send(LOG_FormatUser(discord_user), ephemeral=True)
-            elif verb == "DB":
-                await interaction.followup.send(IO_SerializeJson(DB[args]), ephemeral=True)
-            elif verb == "SAVE":
+            elif verb == "dis_rm_message":
+                discord_channel_id, discord_message_id = args.split(" ")
+                discord_channel = await discord_client.fetch_channel(int(discord_channel_id))
+                discord_message = await discord_channel.fetch_message(int(discord_message_id))
+                await discord_message.delete()
+                await interaction.followup.send("Done!", ephemeral=True)
+            elif verb == "dis_post_button":
+                discord_channel = await discord_client.fetch_channel(int(args))
+                await discord_channel.send("", view=GetVerifiedView())
+                await interaction.followup.send("Done!", ephemeral=True)
+            elif verb == "dis_post_instructions":
+                discord_channel = await discord_client.fetch_channel(int(args))
+                message = f"Welcome to the {discord_channel.guild.name} Discord server!\n\n:shield: To gain access to the rest of the server, you must **verify** your status as an OSU student.\n\n:one: Enter your **@oregonstate.edu** email address and wait for a confirmation email.\n:two: Next, click the provided link and the rest of the server will be **unlocked** for you.\n\n:interrobang: If you need help, feel free to DM me (<@{discord_client.application.owner.id}>) anytime."
+                await discord_channel.send(message)
+                await interaction.followup.send("Done!", ephemeral=True)
+            elif verb == "osu_api_lookup":
+                data = OSU_LookupOnidName(args, raw_data=True)
+                await interaction.followup.send(data, ephemeral=True)
+            elif verb == "env_reload":
+                ENV_Load()
+                await interaction.followup.send("Done!", ephemeral=True)
+            elif verb == "db_get":
+                await interaction.followup.send(IO_SerializeJson(DB[int(args)]), ephemeral=True)
+            elif verb == "db_reload":
+                DB_Load()
+                await interaction.followup.send("Done!", ephemeral=True)
+            elif verb == "db_save":
                 DB_Save()
                 await interaction.followup.send("Done!", ephemeral=True)
-            elif verb == "BACKUP":
+            elif verb == "db_backup":
                 DB_Backup()
                 await interaction.followup.send("Done!", ephemeral=True)
+            else:
+                raise Exception(f"Unknown verb {verb}.")
         except Exception as ex:
             await interaction.followup.send(repr(ex), ephemeral=True)
     except Exception as ex:
