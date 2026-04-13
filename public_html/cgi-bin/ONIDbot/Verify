@@ -4,11 +4,7 @@ import socket
 import errno
 import os
 import json
-import time
-import datetime
-# PYTHON2 - open does not support encoding.
 import codecs
-import urllib
 
 DEV = True
 ROOT = "/nfs/stak/users/christj/onid_bot"
@@ -17,77 +13,26 @@ DEVROOT = "/nfs/stak/users/christj/onid_bot_dev"
 # region File IO
 def IO_RealPath(filePath):
     return os.path.realpath(os.path.expanduser(filePath))
-def IO_GetScriptDir():
-    return os.path.dirname(IO_RealPath(__file__))
-def IO_WriteFile(filePath, contents, binary=False):
-    filePath = IO_RealPath(filePath)
-    if binary:
-        with open(filePath, "wb") as f:
-            f.write(contents)
-    else:
-        # PYTHON2 - open does not support encoding.
-        with codecs.open(filePath, "w", encoding="utf-8") as f:
-            f.write(contents)
 def IO_ReadFile(filePath, defaultContents=None, binary=False):
     filePath = IO_RealPath(filePath)
+    try:
+        if binary:
+            with open(filePath, "rb") as f:
+                return f.read()
+        else:
+            with codecs.open(filePath, "r", encoding="utf-8") as f:
+                return f.read()
+    except IOError as ex:
+        if ex.args[0] == errno.ENOENT and defaultContents != None:
+            return defaultContents
+        else:
+            raise
     if defaultContents != None and not os.path.exists(filePath):
         return defaultContents
-    if binary:
-        with open(filePath, "rb") as f:
-            return f.read()
-    else:
-        # PYTHON2 - open does not support encoding.
-        with codecs.open(filePath, "r", encoding="utf-8") as f:
-            return f.read()
-def IO_AppendFile(filePath, contents, binary=False):
-    filePath = IO_RealPath(filePath)
-    if binary:
-        with open(filePath, "ab") as f:
-            f.write(contents)
-    else:
-        # PYTHON2 - open does not support encoding.
-        with codecs.open(filePath, "a", encoding="utf-8") as f:
-            f.write(contents)
 def IO_SerializeJson(obj, compact=False):
-    return json.dumps(obj, indent=None if compact else 4)
+    return json.dumps(obj, separators=(',', ':') if compact else None, indent=None if compact else 4)
 def IO_DeserializeJson(jsonString):
     return json.loads(jsonString)
-def IO_GetEpoch():
-    return time.time() + time.localtime().tm_gmtoff
-def IO_FormatEpoch(epoch):
-    timestamp = datetime.datetime.fromtimestamp(epoch, tz=datetime.timezone.utc)
-    return timestamp.strftime("%I:%M%p %m/%d").lower()
-# endregion
-
-# region Logs
-def LOG_Generic(message, log_type):
-    padding = " " * (8 - len(log_type)) if len(log_type) < 8 else ""
-    # PYTHON2 - Fstrings are not supported.
-    formatted_message = log_type + padding + "(" + IO_FormatEpoch(IO_GetEpoch()) + " " + str(int(IO_GetEpoch())) + "): " + message
-    # CGIBIN - Output goes to user and should not include internal logs so no print.
-    log_path = os.path.join(DEVROOT if DEV else ROOT, "log.txt")
-    # PYTHON2 - Fstrings are not supported.
-    IO_AppendFile(log_path, formatted_message + "\n")
-def LOG_Info(message):
-    LOG_Generic(message, "Info")
-def LOG_Warning(message):
-    LOG_Generic(message, "Warning")
-def LOG_Error(message):
-    LOG_Generic(message, "ERROR")
-def LOG_Exception(ex):
-    tb = ex.__traceback__
-    while tb is not None:
-        if IO_RealPath(tb.tb_frame.f_code.co_filename) == IO_RealPath(__file__):
-            message = repr(ex)
-            funcname = "<module>" if tb.tb_frame.f_code.co_name == "<module>" else tb.tb_frame.f_code.co_name + "()"
-            lineno = tb.tb_lineno
-            line = IO_ReadFile(tb.tb_frame.f_code.co_filename).splitlines()[lineno - 1].strip()
-            # PYTHON2 - Fstrings are not supported.
-            LOG_Generic(message + " in " + funcname + " line " + str(lineno) + ": " + line, "PY_EX")
-            return
-        tb = tb.tb_next
-    # PYTHON2 - Fstrings are not supported.
-    LOG_Generic(repr(ex) + " at unknown location", "PY_EX")
 # endregion
 
 # region Environment
@@ -95,13 +40,12 @@ ENV = None
 def ENV_Load():
     global ENV
     env_path = os.path.join(DEVROOT if DEV else ROOT, "environment.json")
-    if os.stat(env_path).st_mode != 33152:
-        raise Exception("Insecure permissions on environment.json. Try chmod 600 environment.json")
     ENV = IO_DeserializeJson(IO_ReadFile(env_path))
 # endregion
 
+# TODO Find some way to add logging to this script
+
 def Main():
-    # Future proof by ensuring no newline delimeters in code.
     code = os.environ.get("QUERY_STRING", "").replace("\n", "").replace("\r", "")
     for hostname in ENV["api_hosts"]:
         sock = None
@@ -110,7 +54,7 @@ def Main():
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(1.0) # Host needs to connect within 1 second
             sock.connect((hostname, ENV["api_port"]))
-            sock.settimeout(60.0) # Host can have up to 60 seconds to reply once connected
+            sock.settimeout(30.0) # Host can have up to 30 seconds to reply once connected
             sock.sendall((code + "\n").encode("utf-8"))
             sockfile = sock.makefile("rb", 0)
             return sockfile.readline(65536).decode("utf-8").rstrip("\n")
@@ -124,7 +68,7 @@ def Main():
                 sockfile.close()
             if sock:
                 sock.close()
-    raise Exception("All API servers are down!")
+    raise Exception("All API servers are down.")
 
 print("Content-Type: application/json")
 print("")
@@ -132,5 +76,4 @@ try:
     ENV_Load()
     print(Main())
 except Exception as ex:
-    LOG_Exception(ex)
-    print("{ \"success\": false, \"message\": \"An fatal server error occured. Please DM @finlay_the_berry to report this issue.\" }")
+    print(IO_SerializeJson({ "success": False, "message": str(ex) }, compact=True))

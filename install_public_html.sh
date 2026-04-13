@@ -13,9 +13,3 @@ cp -r ./public_html/ONIDbot ~/public_html/ONIDbot
 rm -rf ~/public_html/cgi-bin/ONIDbot
 cp -r ./public_html/cgi-bin/ONIDbot ~/public_html/cgi-bin/ONIDbot
 echo "Done!"
-
-echo ""
-
-echo "Auditing Perms..."
-find ./ -type f -perm /g+rwx,o+rwx ! -path "./.git/*" ! -path "./public_html/*" -printf "ERROR mode %m on %p\n"
-echo "Done!"

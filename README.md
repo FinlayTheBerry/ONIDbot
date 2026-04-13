@@ -1,3 +1,5 @@
+# TODO UPDATE THIS
+
 # WHAT IS ONIDbot?
 🛡️ ONIDbot is a free and [open-source](https://github.com/FinlayTheBerry/ONIDbot) Discord bot that verifies your server's members using their [onid@oregonstate.edu](https://onid.oregonstate.edu) email addresses.  
 👨‍💻 ONIDbot was developed by Finlay Christ, a Cybersecurity major and President of the OSU Rock Climbing Club.  

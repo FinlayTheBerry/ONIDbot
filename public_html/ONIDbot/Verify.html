@@ -22,7 +22,7 @@
       <div id="loading-container" style="text-align: center;">
         <div style="box-sizing: border-box; border: 5px solid #acaeb1; border-top: 5px solid #d73f09; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 0px auto 15px auto;"></div>
         <h2 style="margin-top: 0px; font-size: 22px;">Verifying...</h2>
-        <p class="message" style="min-height: 3.2em; margin-bottom: 0px; font-size: 16px; line-height: 1.6;">Please wait while we process your request...</p>
+        <p class="message" style="min-height: 3.2em; margin-bottom: 0px; font-size: 16px; line-height: 1.6;">Please wait while we process your verification request...</p>
       </div>
       <div id="success-container" style="display: none; text-align: center;">
         <img src="./icons/check.png" alt="Success" style="width: 50px; height: 50px; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto;">
@@ -32,7 +32,7 @@
       <div id="error-container" style="display: none; text-align: center;">
         <img src="./icons/x.png" alt="Success" style="width: 50px; height: 50px; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto;">
         <h2 style="margin-top: 0px; font-size: 22px;">Verification Failed!</h2>
-        <p class="message" style="min-height: 3.2em; margin-bottom: 0px; font-size: 16px; line-height: 1.6;">The link may have expired or is invalid. Please try requesting a new link from ONIDbot.</p>
+        <p class="message" style="min-height: 3.2em; margin-bottom: 0px; font-size: 16px; line-height: 1.6;">An unknown error occured. Please DM @finlaytheberry to report this issue.</p>
       </div>
     </div>
     <div style="color: #5f6368; padding: 20px; text-align: center; font-size: 12px; background-color: #f8f9fa; border-top: 1px solid #e0e0e0;">
@@ -43,9 +43,10 @@
 <script>
   window.onload = async function () {
     try {
+      // Even requests with no code should be sent to the server to generate logs and allow for debugging.
       const code = window.location.href.includes("?") ? window.location.href.substring(window.location.href.indexOf("?") + 1) : "";
       const apiUrl = `https://web.engr.oregonstate.edu/cgi-bin/cgiwrap/~christj/ONIDbot/Verify?${code}`;
-      const response = await fetch(apiUrl);
+      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(30000) });
       if (!response.ok) {
         throw new Error(`HTTP error. Status code ${response.status}.`);
       }
@@ -57,13 +58,12 @@
       loading_container.style.display = "none";
       const success_container = document.querySelector("#success-container");
       success_container.style.display = "block";
-      success_container.querySelector(".message").textContent = data.message;
     } catch (err) {
       const loading_container = document.querySelector("#loading-container");
       loading_container.style.display = "none";
       const error_container = document.querySelector("#error-container");
       error_container.style.display = "block";
-      error_container.querySelector(".message").textContent = String(err);
+      error_container.querySelector(".message").textContent = "An error occured. Please DM @finlaytheberry if the issue persists. Error details: " + err.message;
     }
   };
 </script>

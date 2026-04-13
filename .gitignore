@@ -1,7 +1,8 @@
-venv/
 environment.json
 database.json
-backups/
 log.txt
 msauth_token
+venv/
 __pycache__/
+backups/
+.git/
