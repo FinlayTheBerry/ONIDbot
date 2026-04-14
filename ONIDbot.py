@@ -346,8 +346,14 @@ async def DIS_DebugVerification(interaction: discord.Interaction, command: str):
                 args = command[1]
 
             if verb == "token_info":
-                data = TOKEN_DeserializeAndVerify(args, ignore_expiration=True)
+                data = TOKEN_DeserializeAndVerify(args, no_expiry=True)
                 await interaction.followup.send(IO_SerializeJson(data), ephemeral=True)
+            elif verb == "db_unverify":
+                if not int(args) in DB:
+                    raise Exception(f"{int(args)} not in DB.")
+                del DB[int(args)]
+                DB_Save()
+                await interaction.followup.send("Done!", ephemeral=True)
             elif verb == "dis_get_guild":
                 discord_guild = await discord_client.fetch_guild(int(args))
                 await interaction.followup.send(LOG_FormatGuild(discord_guild), ephemeral=True)
@@ -437,6 +443,7 @@ async def DIS_Verify(discord_user_id, discord_guild_id, onid_email, onid_name):
         LOG_Warning(f"Missing Perms - Manage Nicknames - {LOG_FormatUser(discord_user)} - {LOG_FormatGuild(discord_guild)}")
         # Non-fatal
 
+    LOG_Info(f"Verified - {LOG_FormatUser(discord_user)} - {LOG_FormatGuild(discord_guild)}")
     return None
 # endregion
 
@@ -449,7 +456,7 @@ async def API_HandleClient(reader, writer):
 
             error = None
             try:
-                data = TOKEN_DeserializeAndVerify(token)
+                data = TOKEN_DeserializeAndVerify(token, no_expiry=True)
                 if data is None:
                     error = "The link may have expired or is invalid. Please try requesting a new link from ONIDbot."
                 else:

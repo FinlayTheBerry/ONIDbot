@@ -7,8 +7,8 @@ if [ ! -d "./venv" ]; then
     source venv/bin/activate
     pip install --upgrade pip
     pip install -r requirements.txt
-    python ./onid_bot.py
+    python ./ONIDbot.py
 else
     source venv/bin/activate
-    python ./onid_bot.py
+    python ./ONIDbot.py
 fi

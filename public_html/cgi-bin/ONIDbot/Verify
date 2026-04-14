@@ -7,8 +7,8 @@ import json
 import codecs
 
 DEV = True
-ROOT = "/nfs/stak/users/christj/onid_bot"
-DEVROOT = "/nfs/stak/users/christj/onid_bot_dev"
+ROOT = "/nfs/stak/users/christj/ONIDbot"
+DEVROOT = "/nfs/stak/users/christj/ONIDbot_DEV"
 
 # region File IO
 def IO_RealPath(filePath):
