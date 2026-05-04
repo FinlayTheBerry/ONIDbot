@@ -1,12 +1,14 @@
 #!/usr/bin/python
 
+# WRITTEN FOR PYTHON VERSION 2.7.5
+
 import socket
 import errno
 import os
 import json
 import codecs
 
-DEV = True
+DEV = False
 ROOT = "/nfs/stak/users/christj/ONIDbot"
 DEVROOT = "/nfs/stak/users/christj/ONIDbot_DEV"
 

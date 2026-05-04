@@ -17,8 +17,8 @@ Verifying with ONIDbot is easy. New members press the "Get Verified!" button, en
 To add ONIDbot to your server [click here](https://discord.com/oauth2/authorize?client_id=1487624623129497641) and follow Discord's instructions.  
 ONIDbot asks for three permissions, each of which are essential for the bot to function correctly:  
 - Manage Roles: Required to give members the "ONID-Verified" role after completing verification.  
-- Manage Nicknames (optional): Allows the bot to change each member's nickname to their full name after verification.  
-- Send Messages: Required to post the verification button so members can click it.  
+- Manage Nicknames (optional): Allows ONIDbit to change each member's nickname to their real name from the OSU directory.  
+- Send Messages: Required to post the "Get Verified!" button so members can click it.  
 
 📝 NOTE: In addition to the Manage Nicknames permission the ONIDbot role must be above each members's highest role in order to change their nickname.  
 
