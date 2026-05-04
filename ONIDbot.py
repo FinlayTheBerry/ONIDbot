@@ -2,18 +2,18 @@
 
 import json
 import os
-import requests
 import datetime
 import time
-import discord
 import sys
+import asyncio
+import socket
+import requests
+import discord
 import smtplib
 from email.message import EmailMessage
 import hmac
 import hashlib
 import base64
-import asyncio
-import socket
 import secrets
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
@@ -27,7 +27,7 @@ def IO_GetScriptDir():
     return os.path.dirname(IO_RealPath(__file__))
 def IO_WriteFile(filePath, contents, binary=False):
     filePath = IO_RealPath(filePath)
-    fd = os.open(filePath, os.O_WRONLY)
+    fd = os.open(filePath, os.O_WRONLY | os.O_TRUNC)
     with open(fd, "wb" if binary else "w", encoding=None if binary else "utf-8") as f:
         f.write(contents)
 def IO_AppendFile(filePath, contents, binary=False):
@@ -209,7 +209,7 @@ def TOKEN_DeserializeAndVerify(token, no_expiry=False):
     decryptor = Cipher(algorithms.AES(bytes.fromhex(ENV['encryption_key'])), modes.CTR(nonce)).decryptor()
     payload = (decryptor.update(ciphertext) + decryptor.finalize()).decode("utf-8")
     data = IO_DeserializeJson(payload)
-    if int(IO_GetEpoch()) - data['timestamp'] > 60 * 15 and not no_expiry:
+    if int(IO_GetEpoch()) - data['timestamp'] > (60 * 60 * 24) and not no_expiry:
         LOG_Warning(f"Bad Token - Expired - {token}")
         return None
     return data
@@ -247,7 +247,7 @@ class GetVerifiedView(discord.ui.View):
                 if error == None:
                     await interaction.followup.send("You are already verified with ONIDbot and have been given the ONID-Verified role on this server.", ephemeral=True)
                 else:
-                    await interaction.followup.send(f"An error occured. Please DM @finlaytheberry if the issue persists. Error details: {error}", ephemeral=True)
+                    await interaction.followup.send(f"An error occurred. Please DM @finlaytheberry if the issue persists. Error details: {error}", ephemeral=True)
             else:
                 LOG_Info(f"Get Verified - Sending Modal - {LOG_FormatUser(interaction.user)} - {LOG_FormatGuild(interaction.guild)}")
                 await interaction.response.send_modal(OnidInputModal())
@@ -268,7 +268,7 @@ class OnidInputModal(discord.ui.Modal):
                 if error == None:
                     await interaction.followup.send("You are already verified with ONIDbot and have been given the ONID-Verified role on this server.", ephemeral=True)
                 else:
-                    await interaction.followup.send(f"An error occured. Please DM @finlaytheberry if the issue persists. Error details: {error}", ephemeral=True)
+                    await interaction.followup.send(f"An error occurred. Please DM @finlaytheberry if the issue persists. Error details: {error}", ephemeral=True)
             else:
                 onid_email = str(self.onid_input.value).strip().lower()
                 if not onid_email.endswith("@oregonstate.edu"):
@@ -284,9 +284,9 @@ class OnidInputModal(discord.ui.Modal):
                 data = { "discord_guild_id": interaction.guild.id, "discord_user_id": interaction.user.id, "onid_email": onid_email, "onid_name": onid_name }
                 token = TOKEN_SerializeAndSign(data)
                 LOG_Info(f"Token Create - {token} - {LOG_FormatUser(interaction.user)} - {LOG_FormatGuild(interaction.guild)}")
-                subject = IO_ReadFile(os.path.join(IO_GetScriptDir(), "email", "subject.txt")).replace("##TOKEN##", token)
-                body = IO_ReadFile(os.path.join(IO_GetScriptDir(), "email", "email.txt")).replace("##TOKEN##", token)
-                body_html = IO_ReadFile(os.path.join(IO_GetScriptDir(), "email", "email.html")).replace("##TOKEN##", token)
+                subject = IO_ReadFile(os.path.join(IO_GetScriptDir(), "email", "subject.txt")).replace("{TOKEN}", token)
+                body = IO_ReadFile(os.path.join(IO_GetScriptDir(), "email", "email.txt")).replace("{TOKEN}", token)
+                body_html = IO_ReadFile(os.path.join(IO_GetScriptDir(), "email", "email.html")).replace("{TOKEN}", token)
                 SMTP_SendEmail(onid_email, subject, body, body_html)
                 await interaction.followup.send(f"A verification link has been sent to **{onid_email}**.\n\nLinks can take up to 5 minutes to arive. Check your **SPAM** folder before requesting a new link.", ephemeral=True)
         except Exception as ex:
@@ -353,6 +353,12 @@ async def DIS_DebugVerification(interaction: discord.Interaction, command: str):
                     raise Exception(f"{int(args)} not in DB.")
                 del DB[int(args)]
                 DB_Save()
+                await interaction.followup.send("Done!", ephemeral=True)
+            elif verb == "manual_verify":
+                discord_user_id, discord_guild_id, onid_email, onid_name = args.split(" ", maxsplit=3)
+                response = await DIS_Verify(discord_user_id, discord_guild_id, onid_email, onid_name)
+                if response != None:
+                    raise Exception(response)
                 await interaction.followup.send("Done!", ephemeral=True)
             elif verb == "dis_get_guild":
                 discord_guild = await discord_client.fetch_guild(int(args))
@@ -456,7 +462,7 @@ async def API_HandleClient(reader, writer):
 
             error = None
             try:
-                data = TOKEN_DeserializeAndVerify(token, no_expiry=True)
+                data = TOKEN_DeserializeAndVerify(token)
                 if data is None:
                     error = "The link may have expired or is invalid. Please try requesting a new link from ONIDbot."
                 else:
