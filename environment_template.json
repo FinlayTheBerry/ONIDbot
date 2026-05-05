@@ -1,0 +1,18 @@
+{
+    "discord_token": "Your discord bot token",
+    "email_username": "Your onid email username. This is the part before the @oregonstate.edu",
+    "email_password": "Your onid email password (in plain text).",
+    "osu_api_id": "Your OSU API ID",
+    "osu_api_secret": "Your OSU API client secret",
+    # These are the hosts hit by CGI-BIN script.
+    "api_hosts": [
+        "flip1.engr.oregonstate.edu",
+        "flip2.engr.oregonstate.edu",
+        "flip3.engr.oregonstate.edu",
+        "flip4.engr.oregonstate.edu"
+    ],
+    # This is the port used by the CGI-BIN script.
+    "api_port": 12345,
+    "signing_key": "A 256 bit random signing key as a hex string",
+    "encryption_key": "A 256 bit random encryption key as a hex string"
+}

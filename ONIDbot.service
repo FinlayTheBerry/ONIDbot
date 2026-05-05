@@ -1,0 +1,9 @@
+[Unit]
+Description=ONIDbot Service
+
+[Service]
+Type=simple
+WorkingDirectory=/nfs/stak/users/christj/ONIDbot
+ExecStart=/bin/sh /nfs/stak/users/christj/ONIDbot/launch.sh
+Restart=on-failure
+RestartSec=5
