@@ -447,6 +447,8 @@ async def DIS_Verify(discord_user_id, discord_guild_id, onid_email, onid_name):
         await discord_user.edit(nick=DB[discord_user_id]['onid_name'])
     except discord.errors.Forbidden as ex:
         LOG_Warning(f"Missing Perms - Manage Nicknames - {LOG_FormatUser(discord_user)} - {LOG_FormatGuild(discord_guild)}")
+    except Exception as ex:
+        LOG_Exception(ex)
         # Non-fatal
 
     LOG_Info(f"Verified - {LOG_FormatUser(discord_user)} - {LOG_FormatGuild(discord_guild)}")
