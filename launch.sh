@@ -2,12 +2,12 @@
 
 cd "$(dirname "$0")"
 
-if [ ! -d "./venv" ]; then
-    python -m venv venv
-    source venv/bin/activate
+if [ ! -d "./env" ]; then
+    python -m venv env
+    source env/bin/activate
     pip install --upgrade pip
     pip install -r requirements.txt
 fi
 
-source venv/bin/activate
+source env/bin/activate
 exec python ./ONIDbot.py

@@ -179,7 +179,7 @@ def MSSMTP_SendEmail(to, subject, body, body_html):
         smtp_server.set_debuglevel(1)
         smtp_server.starttls()
         smtp_server.ehlo() # Required before auth. Handshake to agree on supported features.
-        auth_code = base64.b64encode(("user=" + email + "\x01auth=Bearer " + access_token + "\x01\x01").encode("utf-8")).decode("utf-8")
+        auth_code = base64.b64encode(("user=" + from_address + "\x01auth=Bearer " + access_token + "\x01\x01").encode("utf-8")).decode("utf-8")
         code, resp = smtp_server.docmd("AUTH", "XOAUTH2 " + auth_code)
         if code != 235:
             raise Exception("SMTP auth failure " + str(code) + " " + resp.decode(encoding="utf-8"))

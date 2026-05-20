@@ -1,71 +1,83 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <link rel="icon" type="image/x-icon" href="./favicons/favicon.ico">
-  <link rel="apple-touch-icon" sizes="180x180" href="./favicons/180x180.png">
-  <link rel="icon" type="image/png" sizes="512x512" href="./favicons/512x512.png">
-  <link rel="icon" type="image/png" sizes="192x192" href="./favicons/192x192.png">
-  <link rel="icon" type="image/png" sizes="180x180" href="./favicons/180x180.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="./favicons/32x32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="./favicons/16x16.png">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-  <title>ONIDbot - Get Verified!</title>
-  <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+	<link rel="icon" type="image/x-icon" href="./favicons/favicon.ico">
+	<link rel="apple-touch-icon" sizes="180x180" href="./favicons/180x180.png">
+	<link rel="icon" type="image/png" sizes="512x512" href="./favicons/512x512.png">
+	<link rel="icon" type="image/png" sizes="192x192" href="./favicons/192x192.png">
+	<link rel="icon" type="image/png" sizes="180x180" href="./favicons/180x180.png">
+	<link rel="icon" type="image/png" sizes="32x32" href="./favicons/32x32.png">
+	<link rel="icon" type="image/png" sizes="16x16" href="./favicons/16x16.png">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<title>ONIDbot - Get Verified!</title>
+	<style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
 </head>
 <body style="margin: 0px; padding: 0px; font-family: 'Verdana', sans-serif; color: #202124; display: flex; justify-content: center; align-items: center; min-height: 100vh;">
-  <div style="width: 600px; max-width: calc(100% - 40px); margin: 0px auto 16px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0, 0, 0, .4);">
-    <div style="background-color: #d73f09; padding: 30px; text-align: center;">
-      <h1 style="margin: 0px; font-size: 24px; letter-spacing: 1px; color: #ffffff;">Get Verified! - ONIDbot</h1>
-    </div>
-    <div style="padding: 30px; line-height: 1.6;">
-      <div id="loading-container" style="text-align: center;">
-        <div style="box-sizing: border-box; border: 5px solid #acaeb1; border-top: 5px solid #d73f09; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 0px auto 15px auto;"></div>
-        <h2 style="margin-top: 0px; font-size: 22px;">Verifying...</h2>
-        <p class="message" style="min-height: 3.2em; margin-bottom: 0px; font-size: 16px; line-height: 1.6;">Please wait while we process your verification request...</p>
-      </div>
-      <div id="success-container" style="display: none; text-align: center;">
-        <img src="./icons/check.png" alt="Success" style="width: 50px; height: 50px; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto;">
-        <h2 style="margin-top: 0px; font-size: 22px;">Verified!</h2>
-        <p class="message" style="min-height: 3.2em; margin-bottom: 0px; font-size: 16px; line-height: 1.6;">You have been verified with <strong>ONIDbot</strong>. You can safely close this window and return to Discord.</p>
-      </div>
-      <div id="error-container" style="display: none; text-align: center;">
-        <img src="./icons/x.png" alt="Success" style="width: 50px; height: 50px; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto;">
-        <h2 style="margin-top: 0px; font-size: 22px;">Verification Failed!</h2>
-        <p class="message" style="min-height: 3.2em; margin-bottom: 0px; font-size: 16px; line-height: 1.6;">An unknown error occurred. Please DM @finlaytheberry to report this issue.</p>
-      </div>
-    </div>
-    <div style="color: #5f6368; padding: 20px; text-align: center; font-size: 12px; background-color: #f8f9fa; border-top: 1px solid #e0e0e0;">
-      <p>Report abuse to <strong><a style="color: inherit; text-decoration: none;" href="mailto:christj@oregonstate.edu?subject=ONIDbot Abuse Report&body=Description of abusive behavior (e.g. email spam)...">christj@oregonstate.edu</a></strong></p>
-      <p>Powered by <strong>ONIDbot</strong></p>
-    </div>
-  </div>
+	<div style="width: 600px; max-width: calc(100% - 40px); margin: 0px auto 16px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0, 0, 0, .4);">
+		<div style="background-color: #d73f09; padding: 30px; text-align: center;">
+			<h1 style="margin: 0px; font-size: 24px; letter-spacing: 1px; color: #ffffff;">Get Verified! - ONIDbot</h1>
+		</div>
+		<div style="padding: 30px; line-height: 1.6;">
+			<div class="state-container" id="loading-container" style="display: none; text-align: center;">
+				<div style="box-sizing: border-box; border: 5px solid #acaeb1; border-top: 5px solid #d73f09; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 0px auto 15px auto;"></div>
+				<h2 class="title" style="margin-top: 0px; font-size: 22px;"></h2>
+				<p class="message" style="min-height: 3.2em; margin-bottom: 0px; font-size: 16px; line-height: 1.6;"></p>
+			</div>
+			<div class="state-container" id="success-container" style="display: none; text-align: center;">
+				<img src="./icons/check.png" alt="Success" style="width: 50px; height: 50px; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto;">
+				<h2 class="title" style="margin-top: 0px; font-size: 22px;"></h2>
+				<p class="message" style="min-height: 3.2em; margin-bottom: 0px; font-size: 16px; line-height: 1.6;"></p>
+			</div>
+			<div class="state-container" id="error-container" style="text-align: center;">
+				<img src="./icons/x.png" alt="Error" style="width: 50px; height: 50px; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto;">
+				<h2 class="title" style="margin-top: 0px; font-size: 22px;">JavaScript Disabled</h2>
+				<p class="message" style="min-height: 3.2em; margin-bottom: 0px; font-size: 16px; line-height: 1.6;">JavaScript is required to complete verification. Please enable JavaScript for this site in your browser settings.</p>
+			</div>
+		</div>
+		<div style="color: #5f6368; padding: 20px; text-align: center; font-size: 12px; background-color: #f8f9fa; border-top: 1px solid #e0e0e0;">
+			<p>Report abuse to <strong><a style="color: inherit; text-decoration: none;" href="mailto:christj@oregonstate.edu?subject=ONIDbot Abuse Report&body=Description of abusive behavior (e.g. email spam)...">christj@oregonstate.edu</a></strong></p>
+			<p>Powered by <strong>ONIDbot</strong></p>
+		</div>
+	</div>
 <script>
-  window.onload = async function () {
-    try {
-      // Even requests with no code should be sent to the server to generate logs and allow for debugging.
-      const code = window.location.href.includes("?") ? window.location.href.substring(window.location.href.indexOf("?") + 1) : "";
-      const apiUrl = `https://web.engr.oregonstate.edu/cgi-bin/cgiwrap/~christj/ONIDbot/Verify?${code}`;
-      const response = await fetch(apiUrl, { signal: AbortSignal.timeout(30000) });
-      if (!response.ok) {
-        throw new Error(`HTTP error. Status code ${response.status}.`);
-      }
-      const data = await response.json();
-      if (!data.success) {
-        throw new Error(data.message);
-      }
-      const loading_container = document.querySelector("#loading-container");
-      loading_container.style.display = "none";
-      const success_container = document.querySelector("#success-container");
-      success_container.style.display = "block";
-    } catch (err) {
-      const loading_container = document.querySelector("#loading-container");
-      loading_container.style.display = "none";
-      const error_container = document.querySelector("#error-container");
-      error_container.style.display = "block";
-      error_container.querySelector(".message").textContent = "An error occurred. Please DM @finlaytheberry if the issue persists. Error details: " + err.message;
-    }
-  };
+	const setState = (state, title, message) => {
+		const loading_container = document.querySelector("#loading-container");
+		const success_container = document.querySelector("#success-container");
+		const error_container = document.querySelector("#error-container");
+		loading_container.style.display = state == "loading" ? "block": "none";
+		success_container.style.display = state == "success" ? "block": "none";
+		error_container.style.display = state == "error" ? "block": "none";
+		let container = null;
+		if (state == "loading") {
+			container = loading_container;
+		} else if (state == "success") {
+			container = success_container;
+		} else {
+			container = error_container;
+		}
+		container.querySelector(".title").innerHTML = title;
+		container.querySelector(".message").innerHTML = message;
+	}
+	setState("loading", "Verifying...", "Please wait while we complete your verification...");
+	window.onload = async function () {
+		try {
+			const ENV_NAME = window.location.pathname.split("/").at(-2);
+			const code = window.location.href.includes("?") ? window.location.href.substring(window.location.href.indexOf("?") + 1) : "";
+			const apiUrl = `https://web.engr.oregonstate.edu/cgi-bin/cgiwrap/~christj/${ENV_NAME}/Verify?${code}`;
+			const response = await fetch(apiUrl, { signal: AbortSignal.timeout(30000) });
+			if (!response.ok) {
+				throw new Error(`HTTP error. Status code ${response.status}.`);
+			}
+			const data = await response.json();
+			if (!("state" in data) || !("title" in data) || !("message" in data)) {
+				throw new Error("API response is missing required fields.");
+			}
+			setState(data.state, data.title, data.message);
+		} catch (err) {
+			setState("error", "An Error Occurred", "Please DM @finlaytheberry to report this issue.<br />Error details: " + err.message);
+		}
+	};
 </script>
 </body>
 </html>

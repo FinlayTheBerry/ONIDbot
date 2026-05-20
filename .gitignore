@@ -1,8 +1,9 @@
 environment.json
 database.json
 log.txt
+cgi_log.txt
 msauth_token
-venv/
+env/
 __pycache__/
 backups/
 .git/

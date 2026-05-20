@@ -23,7 +23,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 # region File IO
 def IO_RealPath(filePath):
     return os.path.realpath(os.path.expanduser(filePath))
-def IO_GetScriptDir():
+def IO_GetEnvironmentDir():
     return os.path.dirname(IO_RealPath(__file__))
 def IO_WriteFile(filePath, contents, binary=False):
     filePath = IO_RealPath(filePath)
@@ -65,9 +65,9 @@ def IO_FormatEpoch(epoch):
 
 # region Logs
 def LOG_Generic(message, log_type, ansi_color):
-    formatted_message = f"{log_type} - {IO_FormatEpoch(IO_GetEpoch())} {int(IO_GetEpoch())} - {message}"
+    formatted_message = f"BOT - {log_type} - {IO_FormatEpoch(IO_GetEpoch())} {int(IO_GetEpoch())} - {message}"
     print(f"\033[{ansi_color}m{formatted_message}\033[0m", flush=True)
-    log_path = os.path.join(IO_GetScriptDir(), "log.txt")
+    log_path = os.path.join(IO_GetEnvironmentDir(), "log.txt")
     if not os.path.exists(log_path):
         IO_CreateFile(log_path, f"{formatted_message}\n", 0o600)
     else:
@@ -80,29 +80,26 @@ def LOG_Error(message):
     LOG_Generic(message, "ERROR", "31")
 def LOG_Exception(ex):
     tb = ex.__traceback__
+    tb_data = None
     while tb is not None:
         if IO_RealPath(tb.tb_frame.f_code.co_filename) == IO_RealPath(__file__):
             message = repr(ex)
             funcname = "<module>" if tb.tb_frame.f_code.co_name == "<module>" else tb.tb_frame.f_code.co_name + "()"
             lineno = tb.tb_lineno
             line = IO_ReadFile(tb.tb_frame.f_code.co_filename).splitlines()[lineno - 1].strip()
-            LOG_Generic(f"{message} in {funcname} line {lineno}: {line}", "PY_EX", "31")
-            return
+            tb_data = { "message": message, "funcname": funcname, "lineno": lineno, "line": line }
         tb = tb.tb_next
-    LOG_Generic(f"{repr(ex)} at unknown location", "PY_EX", "31")
-def LOG_FormatUser(user):
-    return f"User(\"{user.display_name}\", \"{user.name}\", {user.id})"
-def LOG_FormatChannel(channel):
-    return f"Channel(\"{channel.name}\", {channel.id})"
-def LOG_FormatGuild(guild):
-    return f"Guild(\"{guild.name}\", {guild.id})"
+    if tb_data == None:
+        LOG_Generic(f"{repr(ex)} at unknown location", "PY_EX", "31")
+    else:
+        LOG_Generic(f"{tb_data['message']} in {tb_data['funcname']} line {tb_data['lineno']}: {tb_data['line']}", "PY_EX", "31")
 # endregion
 
 # region Environment
 ENV = None
 def ENV_Load():
     global ENV
-    env_path = os.path.join(IO_GetScriptDir(), "environment.json")
+    env_path = os.path.join(IO_GetEnvironmentDir(), "environment.json")
     ENV = IO_DeserializeJson(IO_ReadFile(env_path))
 # endregion
 
@@ -110,19 +107,18 @@ def ENV_Load():
 DB = None
 def DB_Load():
     global DB
-    db_path = os.path.join(IO_GetScriptDir(), "database.json")
+    db_path = os.path.join(IO_GetEnvironmentDir(), "database.json")
     DB = IO_DeserializeJson(IO_ReadFile(db_path))
     DB = { int(key): value for key, value in DB.items() }
 def DB_Backup():
-    db_path = os.path.join(IO_GetScriptDir(), "database.json")
+    db_path = os.path.join(IO_GetEnvironmentDir(), "database.json")
     backup_file_name = f"backups/{int(IO_GetEpoch())}.json"
-    backup_path = os.path.join(IO_GetScriptDir(), backup_file_name)
+    backup_path = os.path.join(IO_GetEnvironmentDir(), backup_file_name)
     IO_CreateFile(backup_path, IO_ReadFile(db_path), 0o600)
-    LOG_Info(f"DB Backup - {backup_file_name}")
 def DB_Save():
-    db_path = os.path.join(IO_GetScriptDir(), "database.json")
+    db_path = os.path.join(IO_GetEnvironmentDir(), "database.json")
     IO_WriteFile(db_path, IO_SerializeJson(DB))
-    backups_dir_path = os.path.join(IO_GetScriptDir(), "backups")
+    backups_dir_path = os.path.join(IO_GetEnvironmentDir(), "backups")
     latest_backup_time = 0
     for backup_name in os.listdir(backups_dir_path):
         backup_time = int(os.path.splitext(backup_name)[0])
@@ -133,7 +129,7 @@ def DB_Save():
 # endregion
 
 # region OSU API
-def OSU_LookupOnidName(onid_email, raw_data=False):
+def OSU_LookupOnidName(onid_email):
     # Get a token
     response = requests.post("https://api.oregonstate.edu/oauth2/token", data={"grant_type": "client_credentials"}, auth=(ENV['osu_api_id'], ENV['osu_api_secret']))
     response.raise_for_status()
@@ -146,18 +142,10 @@ def OSU_LookupOnidName(onid_email, raw_data=False):
     data = response.json()['data']
 
     # Return output or None
-    if raw_data:
-        LOG_Info(f"OSU API - \"{onid_email}\" - RAW DATA")
-        return IO_SerializeJson(data)
-    elif len(data) == 1:
+    if len(data) == 1:
         output = f"{data[0]['attributes']['firstName']} {data[0]['attributes']['lastName']}"
-        LOG_Info(f"OSU API - \"{onid_email}\" - \"{output}\"")
         return output
-    elif len(data) == 0:
-        LOG_Warning(f"OSU API - \"{onid_email}\" - NO DATA")
-        return None
     else:
-        LOG_Warning(f"OSU API - \"{onid_email}\" - TOO MANY HITS")
         return None
 # endregion
 
@@ -176,7 +164,6 @@ def SMTP_SendEmail(to, subject, body, body_html):
     with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as smtp_server:
         smtp_server.login(ENV['email_username'], ENV['email_password'])
         smtp_server.send_message(msg)
-    LOG_Info(f"Email - \"{to}\" - \"{subject}\"")
 # endregion
 
 # region Tokens And Crypto
@@ -191,10 +178,9 @@ def TOKEN_SerializeAndSign(data):
     signature = hmac.new(bytes.fromhex(ENV['signing_key']), f"{b64_nonce}.{b64_ciphertext}".encode("utf-8"), hashlib.sha256).digest()
     b64_signature = base64.urlsafe_b64encode(signature).decode("utf-8").rstrip("=")
     return f"{b64_nonce}.{b64_ciphertext}.{b64_signature}"
-def TOKEN_DeserializeAndVerify(token, no_expiry=False):
+def TOKEN_DeserializeAndVerify(token):
     sections = token.split(".")
     if len(sections) != 3:
-        LOG_Warning(f"Bad Token - Section Count - {token}")
         return None
     b64_nonce = sections[0]
     b64_ciphertext = sections[1]
@@ -202,22 +188,28 @@ def TOKEN_DeserializeAndVerify(token, no_expiry=False):
     good_signature = hmac.new(bytes.fromhex(ENV['signing_key']), f"{b64_nonce}.{b64_ciphertext}".encode("utf-8"), hashlib.sha256).digest()
     b64_good_signature = base64.urlsafe_b64encode(good_signature).decode("utf-8").rstrip("=")
     if not hmac.compare_digest(b64_signature, b64_good_signature):
-        LOG_Warning(f"Bad Token - Signature - {token}")
         return None
     nonce = base64.urlsafe_b64decode(b64_nonce.encode("utf-8") + b"===")
     ciphertext = base64.urlsafe_b64decode(b64_ciphertext.encode("utf-8") + b"===")
     decryptor = Cipher(algorithms.AES(bytes.fromhex(ENV['encryption_key'])), modes.CTR(nonce)).decryptor()
     payload = (decryptor.update(ciphertext) + decryptor.finalize()).decode("utf-8")
-    data = IO_DeserializeJson(payload)
-    if int(IO_GetEpoch()) - data['timestamp'] > (60 * 60 * 24) and not no_expiry:
-        LOG_Warning(f"Bad Token - Expired - {token}")
-        return None
-    return data
+    return IO_DeserializeJson(payload)
+def TOKEN_IsExpired(data):
+    if int(IO_GetEpoch()) - data['timestamp'] > (60 * 60 * 24):
+        return True
+    return False
 # endregion
 
 # region Discord
 discord_client = discord.Client(intents=discord.Intents.default())
 discord_command_tree = discord.app_commands.CommandTree(discord_client)
+
+def DIS_FormatUser(user):
+    return f"User(\"{user.display_name}\", \"{user.name}\", {user.id})"
+def DIS_FormatChannel(channel):
+    return f"Channel(\"{channel.name}\", {channel.id})"
+def DIS_FormatGuild(guild):
+    return f"Guild(\"{guild.name}\", {guild.id})"
 
 @discord_client.event
 async def on_ready(): 
@@ -225,13 +217,13 @@ async def on_ready():
         await discord_command_tree.sync()
         discord_client.add_view(GetVerifiedView())
         await discord_client.change_presence(activity=discord.CustomActivity("🛡️ Verifying OSU Students..."), status=discord.Status.online)
-        LOG_Info(f"Bot Online - {socket.gethostname()} - {LOG_FormatUser(discord_client.user)}")
+        LOG_Info(f"Bot Online - {socket.gethostname()} - {DIS_FormatUser(discord_client.user)}")
     except Exception as ex:
         LOG_Exception(ex)
         raise
 @discord_client.event
 async def on_guild_join(guild: discord.Guild): 
-    LOG_Info(f"Join Guild - {LOG_FormatGuild(guild)}")
+    LOG_Info(f"Join Guild - {DIS_FormatGuild(guild)}")
 
 class GetVerifiedView(discord.ui.View):
     def __init__(self):
@@ -242,14 +234,14 @@ class GetVerifiedView(discord.ui.View):
             already_verified = interaction.user.id in DB and interaction.user.id != discord_client.application.owner.id
             if already_verified:
                 await interaction.response.defer(ephemeral=True)
-                LOG_Info(f"Get Verified - Refreshing Verification - {LOG_FormatUser(interaction.user)} - {LOG_FormatGuild(interaction.guild)}")
+                LOG_Info(f"Get Verified - Refreshing Verification - {DIS_FormatUser(interaction.user)} - {DIS_FormatGuild(interaction.guild)}")
                 error = await DIS_Verify(interaction.user.id, interaction.guild.id, DB[interaction.user.id]['onid_email'], DB[interaction.user.id]['onid_name'])
                 if error == None:
                     await interaction.followup.send("You are already verified with ONIDbot and have been given the ONID-Verified role on this server.", ephemeral=True)
                 else:
                     await interaction.followup.send(f"An error occurred. Please DM @finlaytheberry if the issue persists. Error details: {error}", ephemeral=True)
             else:
-                LOG_Info(f"Get Verified - Sending Modal - {LOG_FormatUser(interaction.user)} - {LOG_FormatGuild(interaction.guild)}")
+                LOG_Info(f"Get Verified - Sending Modal - {DIS_FormatUser(interaction.user)} - {DIS_FormatGuild(interaction.guild)}")
                 await interaction.response.send_modal(OnidInputModal())
         except Exception as ex:
             LOG_Exception(ex)
@@ -263,7 +255,7 @@ class OnidInputModal(discord.ui.Modal):
             await interaction.response.defer(ephemeral=True)
             already_verified = interaction.user.id in DB and interaction.user.id != discord_client.application.owner.id
             if already_verified:
-                LOG_Info(f"Onid Input - Refreshing Verification - \"{self.onid_input.value}\" - {LOG_FormatUser(interaction.user)} - {LOG_FormatGuild(interaction.guild)}")
+                LOG_Info(f"Onid Input - Refreshing Verification - \"{self.onid_input.value}\" - {DIS_FormatUser(interaction.user)} - {DIS_FormatGuild(interaction.guild)}")
                 error = await DIS_Verify(interaction.user.id, interaction.guild.id, DB[interaction.user.id]['onid_email'], DB[interaction.user.id]['onid_name'])
                 if error == None:
                     await interaction.followup.send("You are already verified with ONIDbot and have been given the ONID-Verified role on this server.", ephemeral=True)
@@ -272,21 +264,21 @@ class OnidInputModal(discord.ui.Modal):
             else:
                 onid_email = str(self.onid_input.value).strip().lower()
                 if not onid_email.endswith("@oregonstate.edu"):
-                    LOG_Info(f"Onid Input - Bad Format - \"{self.onid_input.value}\" - {LOG_FormatUser(interaction.user)} - {LOG_FormatGuild(interaction.guild)}")
+                    LOG_Info(f"Onid Input - Bad Format - \"{self.onid_input.value}\" - {DIS_FormatUser(interaction.user)} - {DIS_FormatGuild(interaction.guild)}")
                     await interaction.followup.send(f"The email address you entered must end with @oregonstate.edu. Please try again.", ephemeral=True)
                     return
                 onid_name = OSU_LookupOnidName(onid_email)
                 if onid_name == None:
-                    LOG_Info(f"Onid Input - No Directory - \"{self.onid_input.value}\" - {LOG_FormatUser(interaction.user)} - {LOG_FormatGuild(interaction.guild)}")
+                    LOG_Info(f"Onid Input - No Directory - \"{self.onid_input.value}\" - {DIS_FormatUser(interaction.user)} - {DIS_FormatGuild(interaction.guild)}")
                     await interaction.followup.send(f"The email address you entered could not be found in the OSU Directory. Please try again.", ephemeral=True)
                     return
-                LOG_Info(f"Onid Input - Sending Email - \"{self.onid_input.value}\" - {LOG_FormatUser(interaction.user)} - {LOG_FormatGuild(interaction.guild)}")
+                LOG_Info(f"Onid Input - Sending Email - \"{self.onid_input.value}\" - {DIS_FormatUser(interaction.user)} - {DIS_FormatGuild(interaction.guild)}")
                 data = { "discord_guild_id": interaction.guild.id, "discord_user_id": interaction.user.id, "onid_email": onid_email, "onid_name": onid_name }
                 token = TOKEN_SerializeAndSign(data)
-                LOG_Info(f"Token Create - {token} - {LOG_FormatUser(interaction.user)} - {LOG_FormatGuild(interaction.guild)}")
-                subject = IO_ReadFile(os.path.join(IO_GetScriptDir(), "email", "subject.txt")).replace("{TOKEN}", token)
-                body = IO_ReadFile(os.path.join(IO_GetScriptDir(), "email", "email.txt")).replace("{TOKEN}", token)
-                body_html = IO_ReadFile(os.path.join(IO_GetScriptDir(), "email", "email.html")).replace("{TOKEN}", token)
+                LOG_Info(f"Token Create - {token} - {DIS_FormatUser(interaction.user)} - {DIS_FormatGuild(interaction.guild)}")
+                subject = IO_ReadFile(os.path.join(IO_GetEnvironmentDir(), "email", "subject.txt")).replace("{TOKEN}", token).replace("{ENV_NAME}", os.path.basename(os.getcwd()))
+                body = IO_ReadFile(os.path.join(IO_GetEnvironmentDir(), "email", "email.txt")).replace("{TOKEN}", token).replace("{ENV_NAME}", os.path.basename(os.getcwd()))
+                body_html = IO_ReadFile(os.path.join(IO_GetEnvironmentDir(), "email", "email.html")).replace("{TOKEN}", token).replace("{ENV_NAME}", os.path.basename(os.getcwd()))
                 SMTP_SendEmail(onid_email, subject, body, body_html)
                 await interaction.followup.send(f"A verification link has been sent to **{onid_email}**.\n\nLinks can take up to 5 minutes to arive. Check your **SPAM** folder before requesting a new link.", ephemeral=True)
         except Exception as ex:
@@ -298,16 +290,16 @@ async def DIS_PostVerificationButton(interaction: discord.Interaction):
     try:
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.guild_permissions.administrator:
-            LOG_Info(f"Post Button - No Admin - {LOG_FormatUser(interaction.user)} - {LOG_FormatGuild(interaction.guild)}")
+            LOG_Info(f"Post Button - No Admin - {DIS_FormatUser(interaction.user)} - {DIS_FormatGuild(interaction.guild)}")
             await interaction.followup.send("You need the administrator permission on this server to run this command.")
             return
         try:
             await interaction.channel.send("", view=GetVerifiedView())
         except discord.errors.Forbidden as ex:
-            LOG_Info(f"Post Button - No Permission - {LOG_FormatUser(interaction.user)} - {LOG_FormatGuild(interaction.guild)}")
+            LOG_Info(f"Post Button - No Permission - {DIS_FormatUser(interaction.user)} - {DIS_FormatGuild(interaction.guild)}")
             await interaction.followup.send(f"{discord_client.user.mention} does not have permission to post messages in this channel and therefore could not post the verification buttons.", ephemeral=True)
             return
-        LOG_Info(f"Post Button - Done! - {LOG_FormatUser(interaction.user)} - {LOG_FormatGuild(interaction.guild)}")
+        LOG_Info(f"Post Button - Done! - {DIS_FormatUser(interaction.user)} - {DIS_FormatGuild(interaction.guild)}")
         await interaction.followup.send("Done!")
     except Exception as ex:
         LOG_Exception(ex)
@@ -317,14 +309,14 @@ async def DIS_GetVerificationInfo(interaction: discord.Interaction, user: discor
     try:
         await interaction.response.defer(ephemeral=True)
         if not interaction.user.id in DB:
-            LOG_Info(f"Get Info - Not Verified - {LOG_FormatUser(interaction.user)} - {LOG_FormatUser(user)} - {LOG_FormatGuild(interaction.guild)}")
+            LOG_Info(f"Get Info - Not Verified - {DIS_FormatUser(interaction.user)} - {DIS_FormatUser(user)} - {DIS_FormatGuild(interaction.guild)}")
             await interaction.followup.send("You must be verified by ONIDbot to run this command.", ephemeral=True)
             return
         if user.id in DB:
-            LOG_Info(f"Get Info - Done! (yes) - {LOG_FormatUser(interaction.user)} - {LOG_FormatUser(user)} - {LOG_FormatGuild(interaction.guild)}")
+            LOG_Info(f"Get Info - Done! (yes) - {DIS_FormatUser(interaction.user)} - {DIS_FormatUser(user)} - {DIS_FormatGuild(interaction.guild)}")
             await interaction.followup.send(f"{user.mention} is verified as \"{DB[user.id]['onid_name']}\" {DB[user.id]['onid_email']}.", ephemeral=True)
         else:
-            LOG_Info(f"Get Info - Done! (no) - {LOG_FormatUser(interaction.user)} - {LOG_FormatUser(user)} - {LOG_FormatGuild(interaction.guild)}")
+            LOG_Info(f"Get Info - Done! (no) - {DIS_FormatUser(interaction.user)} - {DIS_FormatUser(user)} - {DIS_FormatGuild(interaction.guild)}")
             await interaction.followup.send(f"{user.mention} is not verified.", ephemeral=True)
     except Exception as ex:
         LOG_Exception(ex)
@@ -334,7 +326,7 @@ async def DIS_DebugVerification(interaction: discord.Interaction, command: str):
     try:
         await interaction.response.defer(ephemeral=True)
         if interaction.user.id != discord_client.application.owner.id:
-            LOG_Info(f"Debug - Not Owner - {LOG_FormatUser(interaction.user)} - {LOG_FormatGuild(interaction.guild)}")
+            LOG_Info(f"Debug - Not Owner - {DIS_FormatUser(interaction.user)} - {DIS_FormatGuild(interaction.guild)}")
             await interaction.followup.send("You must be an ONIDbot developer to run this command.", ephemeral=True)
             return
 
@@ -346,7 +338,7 @@ async def DIS_DebugVerification(interaction: discord.Interaction, command: str):
                 args = command[1]
 
             if verb == "token_info":
-                data = TOKEN_DeserializeAndVerify(args, no_expiry=True)
+                data = TOKEN_DeserializeAndVerify(args)
                 await interaction.followup.send(IO_SerializeJson(data), ephemeral=True)
             elif verb == "db_unverify":
                 if not int(args) in DB:
@@ -362,13 +354,13 @@ async def DIS_DebugVerification(interaction: discord.Interaction, command: str):
                 await interaction.followup.send("Done!", ephemeral=True)
             elif verb == "dis_get_guild":
                 discord_guild = await discord_client.fetch_guild(int(args))
-                await interaction.followup.send(LOG_FormatGuild(discord_guild), ephemeral=True)
+                await interaction.followup.send(DIS_FormatGuild(discord_guild), ephemeral=True)
             elif verb == "dis_get_channel":
                 discord_channel = await discord_client.fetch_channel(int(args))
-                await interaction.followup.send(LOG_FormatChannel(discord_channel), ephemeral=True)
+                await interaction.followup.send(DIS_FormatChannel(discord_channel), ephemeral=True)
             elif verb == "dis_get_user":
                 discord_user = await discord_client.fetch_user(int(args))
-                await interaction.followup.send(LOG_FormatUser(discord_user), ephemeral=True)
+                await interaction.followup.send(DIS_FormatUser(discord_user), ephemeral=True)
             elif verb == "dis_rm_message":
                 discord_channel_id, discord_message_id = args.split(" ")
                 discord_channel = await discord_client.fetch_channel(int(discord_channel_id))
@@ -385,7 +377,7 @@ async def DIS_DebugVerification(interaction: discord.Interaction, command: str):
                 await discord_channel.send(message)
                 await interaction.followup.send("Done!", ephemeral=True)
             elif verb == "osu_api_lookup":
-                data = OSU_LookupOnidName(args, raw_data=True)
+                data = OSU_LookupOnidName(args)
                 await interaction.followup.send(data, ephemeral=True)
             elif verb == "env_reload":
                 ENV_Load()
@@ -425,7 +417,7 @@ async def DIS_Verify(discord_user_id, discord_guild_id, onid_email, onid_name):
     if discord_user is None:
         discord_user = await discord_guild.fetch_member(discord_user_id)
     if discord_user is None:
-        LOG_Warning(f"User Lookup - {discord_user_id} - {LOG_FormatGuild(discord_guild)}")
+        LOG_Warning(f"User Lookup - {discord_user_id} - {DIS_FormatGuild(discord_guild)}")
         return "Failed to lookup user from token data."
 
     verified_role = None
@@ -434,45 +426,46 @@ async def DIS_Verify(discord_user_id, discord_guild_id, onid_email, onid_name):
             verified_role = guild_role
             break
     if verified_role == None:
-        LOG_Warning(f"Missing Role - {LOG_FormatUser(discord_user)} - {LOG_FormatGuild(discord_guild)}")
+        LOG_Warning(f"Missing Role - {DIS_FormatUser(discord_user)} - {DIS_FormatGuild(discord_guild)}")
         return "ONID-Verified role does not exist."
     
     try:
         await discord_user.add_roles(verified_role)
     except discord.errors.Forbidden as ex:
-        LOG_Warning(f"Missing Perms - Manage Roles - {LOG_FormatUser(discord_user)} - {LOG_FormatGuild(discord_guild)}")
+        LOG_Warning(f"Missing Perms - Manage Roles - {DIS_FormatUser(discord_user)} - {DIS_FormatGuild(discord_guild)}")
         return "Failed to assign ONID-Verified role due to missing permissions."
     
     try:
         await discord_user.edit(nick=DB[discord_user_id]['onid_name'])
     except discord.errors.Forbidden as ex:
-        LOG_Warning(f"Missing Perms - Manage Nicknames - {LOG_FormatUser(discord_user)} - {LOG_FormatGuild(discord_guild)}")
+        LOG_Warning(f"Missing Perms - Manage Nicknames - {DIS_FormatUser(discord_user)} - {DIS_FormatGuild(discord_guild)}")
     except Exception as ex:
         LOG_Exception(ex)
         # Non-fatal
 
-    LOG_Info(f"Verified - {LOG_FormatUser(discord_user)} - {LOG_FormatGuild(discord_guild)}")
+    LOG_Info(f"Verified - {DIS_FormatUser(discord_user)} - {DIS_FormatGuild(discord_guild)}")
     return None
 # endregion
 
 # region API Server
-async def API_HandleClient(reader, writer):
+async def API_ProcessRequest(request):
+    try:
+        data = TOKEN_DeserializeAndVerify(request)
+        if data is None:
+            return "error", "An Error Occurred", f"Please DM @finlaytheberry to report this issue.<br />Error details: Invalid token."
+        if TOKEN_IsExpired(data):
+            return "error", "Link Expired", "This link has expired. Please request a new one from ONIDbot."
+        await DIS_Verify(data['discord_user_id'], data['discord_guild_id'], data['onid_email'], data['onid_name'])
+        return "success", "Verified!", "You have been verified with <strong>ONIDbot</strong>. You can safely close this window and return to Discord."
+    except Exception as ex:
+        return "error", "An Error Occurred", f"Please DM @finlaytheberry to report this issue.<br />Error details: {str(ex)}"
+async def API_ClientHandler(reader, writer):
     try:
         try:
-            token = (await asyncio.wait_for(reader.readline(), timeout=2.0)).decode("utf-8").rstrip("\n")
-            LOG_Info(f"API Incoming - {token}")
-
-            error = None
-            try:
-                data = TOKEN_DeserializeAndVerify(token)
-                if data is None:
-                    error = "The link may have expired or is invalid. Please try requesting a new link from ONIDbot."
-                else:
-                    error = await DIS_Verify(data['discord_user_id'], data['discord_guild_id'], data['onid_email'], data['onid_name'])
-            except Exception as ex:
-                error = str(ex)
-
-            writer.write(IO_SerializeJson({ "success": False if error else True, "message": error }, compact=True).encode("utf-8"))
+            request = (await asyncio.wait_for(reader.readline(), timeout=2.0)).decode("utf-8").rstrip("\n")
+            state, title, message = await API_ProcessRequest(request)
+            response = IO_SerializeJson({ "state": state, "title": title, "message": message }, compact=True) + "\n"
+            writer.write(response.encode("utf-8"))
             await asyncio.wait_for(writer.drain(), timeout=2.0)
         finally:
             writer.close()
@@ -480,7 +473,7 @@ async def API_HandleClient(reader, writer):
     except Exception as ex:
         LOG_Exception(ex)
 async def API_RunServer():
-    server = await asyncio.start_server(API_HandleClient, "0.0.0.0", ENV['api_port'])
+    server = await asyncio.start_server(API_ClientHandler, "0.0.0.0", ENV['api_port'])
     LOG_Info(f"API Online - {socket.gethostname()}:{ENV['api_port']}.")
     async with server:
         await server.serve_forever()
