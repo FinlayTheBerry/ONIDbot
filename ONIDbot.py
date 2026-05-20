@@ -482,6 +482,10 @@ async def API_RunServer():
 # region Main
 async def Main():
     try:
+        LOG_Info("test info")
+        LOG_Warning("test warning")
+        LOG_Error("test error")
+        raise Exception("test exception")
         ENV_Load()
         DB_Load()
         await asyncio.gather(API_RunServer(), discord_client.start(ENV['discord_token']))
